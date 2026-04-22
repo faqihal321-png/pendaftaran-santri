@@ -18,20 +18,24 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
 // --- 2. FIREBASE ---
+// --- 2. FIREBASE ---
 let db;
+let bucket; // Tambahkan ini agar variabel bucket bisa dibaca di seluruh file
+
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-   // Ganti bagian inisialisasi admin dengan ini
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/",
-        storageBucket: "psb-pesantren.appspot.com" // Ganti dengan ID bucket Anda dari Firebase Console
+        // Ganti teks di bawah dengan ID bucket storage Anda (biasanya berakhiran .appspot.com)
+        storageBucket: "psb-pesantren-default-rtdb.appspot.com" 
     });
-    const bucket = admin.storage().bucket();
+    
     db = admin.database();
-    console.log("✅ Firebase Connected");
+    bucket = admin.storage().bucket(); // TEPAT DI SINI: Mendefinisikan bucket
+    console.log("✅ Firebase & Storage Connected");
 } catch (e) {
-    console.error("❌ Firebase Error: Periksa FIREBASE_CONFIG!", e.message);
+    console.error("❌ Firebase Error:", e.message);
 }
 
 // --- 3. KEAMANAN ---
@@ -249,10 +253,8 @@ app.get('/admin', checkAuth, async (req, res) => {
 // --- 6. ROUTE PENDAFTARAN (SOLUSI UPLOAD) ---
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
-const storage = multer.diskStorage({
-    destination: 'uploads/',
-    filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname); }
-});
+// Ganti diskStorage menjadi memoryStorage
+const storage = multer.memoryStorage(); 
 const upload = multer({ storage: storage });
 
 const cpUpload = upload.fields([
