@@ -83,26 +83,27 @@ app.get('/logout', (req, res) => {
 // --- 5. ROUTES DATA ---
 app.get('/admin', checkAuth, async (req, res) => {
     try {
+        if (!db) throw new Error("Database tidak terhubung!");
+        
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
-        // Baris Tabel
         let rows = daftar.map((s, i) => `
             <tr>
-                <td class="text-center">${i + 1}</td>
+                <td class="text-center fw-bold">${i + 1}</td>
                 <td class="text-center">
-                    <img src="/uploads/${s.foto_santri}" class="rounded shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60'">
+                    <img src="/uploads/${s.foto_santri}" class="img-thumbnail shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60'">
                 </td>
                 <td>
-                    <div class="fw-bold">${s.nama}</div>
+                    <div class="fw-bold text-dark">${s.nama}</div>
                     <small class="text-muted">NIK: ${s.nik || '-'}</small>
                 </td>
                 <td><span class="badge bg-success bg-opacity-10 text-success">${s.sekolah_tujuan || '-'}</span></td>
                 <td class="text-center">
-                    <div class="btn-group">
-                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-sm btn-outline-success"><i class="bi bi-whatsapp"></i></a>
-                        <button class="btn btn-sm btn-primary" onclick='viewDetail(${JSON.stringify(s)})'>
+                    <div class="btn-group btn-group-sm">
+                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-outline-success"><i class="bi bi-whatsapp"></i></a>
+                        <button class="btn btn-primary" onclick='viewDetail(${JSON.stringify(s)})'>
                             <i class="bi bi-eye"></i> Detail
                         </button>
                     </div>
@@ -116,33 +117,34 @@ app.get('/admin', checkAuth, async (req, res) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Admin Panel</title>
+                <title>Admin Panel - PSB Pesantren</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
                 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
                 <style>
                     body { background: #f8fafc; font-family: 'Segoe UI', sans-serif; }
                     .navbar { background: #1a5928; }
-                    .detail-label { font-weight: bold; color: #64748b; font-size: 0.85rem; text-transform: uppercase; }
-                    .detail-value { color: #1e293b; font-weight: 500; margin-bottom: 12px; }
+                    .detail-label { font-weight: bold; color: #64748b; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 2px; }
+                    .detail-value { color: #1e293b; font-weight: 600; margin-bottom: 12px; font-size: 0.95rem; }
                     .modal-content { border-radius: 15px; border: none; }
+                    .section-title { border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 15px; font-weight: bold; color: #1a5928; }
                 </style>
             </head>
             <body>
-                <nav class="navbar navbar-dark mb-4">
-                    <div class="container text-white">
-                        <span class="navbar-brand fw-bold">Dashboard Admin PSB</span>
-                        <a href="/logout" class="btn btn-sm btn-danger">Keluar</a>
+                <nav class="navbar navbar-dark mb-4 shadow-sm">
+                    <div class="container">
+                        <span class="navbar-brand fw-bold"><i class="bi bi-mortarboard-fill me-2"></i> Dashboard Admin PSB</span>
+                        <a href="/logout" class="btn btn-sm btn-danger px-3">Keluar</a>
                     </div>
                 </nav>
 
                 <div class="container">
                     <div class="card border-0 shadow-sm rounded-4 p-4">
-                        <h4 class="fw-bold mb-4">Daftar Santri Terdaftar</h4>
+                        <h4 class="fw-bold mb-4 text-dark text-center">Daftar Calon Santri Terdaftar</h4>
                         <div class="table-responsive">
                             <table id="tabelSantri" class="table table-hover align-middle">
-                                <thead>
-                                    <tr class="table-light">
+                                <thead class="table-light">
+                                    <tr>
                                         <th class="text-center">No</th><th class="text-center">Foto</th><th>Nama</th><th>Jenjang</th><th class="text-center">Aksi</th>
                                     </tr>
                                 </thead>
@@ -155,14 +157,12 @@ app.get('/admin', checkAuth, async (req, res) => {
                 <div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
                     <div class="modal-dialog modal-lg modal-dialog-centered">
                         <div class="modal-content shadow-lg">
-                            <div class="modal-header border-0 pb-0">
-                                <h5 class="fw-bold">Detail Lengkap Santri</h5>
+                            <div class="modal-header bg-light border-0">
+                                <h5 class="fw-bold mb-0">Detail Lengkap Santri</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
-                            <div class="modal-body p-4">
-                                <div class="row" id="detailContent">
-                                    </div>
-                            </div>
+                            <div class="modal-body p-4" id="detailContent">
+                                </div>
                         </div>
                     </div>
                 </div>
@@ -179,38 +179,46 @@ app.get('/admin', checkAuth, async (req, res) => {
 
                     function viewDetail(s) {
                         const content = \`
-                            <div class="col-md-4 text-center mb-4">
-                                <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded-4 shadow-sm border" style="max-height: 250px;">
-                                <div class="mt-3">
-                                    <span class="badge bg-success px-3 py-2">\${s.sekolah_tujuan}</span>
+                            <div class="row">
+                                <div class="col-md-4 text-center mb-4">
+                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded-4 shadow-sm border mb-3" style="max-height: 280px; width:100%; object-fit:cover;" onerror="this.src='https://via.placeholder.com/200x280'">
+                                    <div class="badge bg-success w-100 py-2 fs-6">\${s.sekolah_tujuan || '-'}</div>
                                 </div>
-                            </div>
-                            <div class="col-md-8">
-                                <div class="row">
-                                    <div class="col-6">
-                                        <div class="detail-label">Nama Lengkap</div>
-                                        <div class="detail-value">\${s.nama}</div>
-                                        <div class="detail-label">NIK</div>
-                                        <div class="detail-value">\${s.nik || '-'}</div>
-                                        <div class="detail-label">Tempat, Tgl Lahir</div>
-                                        <div class="detail-value">\${s.tempat_lahir || '-'}, \${s.tanggal_lahir || '-'}</div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="detail-label">Jenis Kelamin</div>
-                                        <div class="detail-value">\${s.jenis_kelamin || '-'}</div>
-                                        <div class="detail-label">WhatsApp</div>
-                                        <div class="detail-value">\${s.whatsapp_orangtua || '-'}</div>
-                                        <div class="detail-label">Asal Sekolah</div>
-                                        <div class="detail-value">\${s.asal_sekolah || '-'}</div>
-                                    </div>
-                                    <hr class="my-2">
-                                    <div class="col-12 mt-2 text-center">
-                                        <div class="detail-label mb-2">Dokumen Pendukung</div>
-                                        <div class="d-flex justify-content-center gap-2">
-                                            <a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat KTP Ayah</a>
-                                            <a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat Ijazah</a>
-                                            <a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat KK</a>
+                                <div class="col-md-8">
+                                    <h6 class="section-title"><i class="bi bi-person-fill me-2"></i>DATA PRIBADI</h6>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="detail-label">Nama Lengkap</div><div class="detail-value text-uppercase">\${s.nama || '-'}</div>
+                                            <div class="detail-label">NISN</div><div class="detail-value">\${s.nisn || '<span class="text-danger small italic">Belum Diisi</span>'}</div>
+                                            <div class="detail-label">NIK</div><div class="detail-value">\${s.nik || '-'}</div>
                                         </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">Tempat, Tgl Lahir</div><div class="detail-value">\${s.tempat_lahir || '-'}, \${s.tanggal_lahir || '-'}</div>
+                                            <div class="detail-label">Jenis Kelamin</div><div class="detail-value">\${s.jenis_kelamin || '-'}</div>
+                                            <div class="detail-label">Asal Sekolah</div><div class="detail-value">\${s.asal_sekolah || '-'}</div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="detail-label">Alamat Lengkap</div><div class="detail-value bg-light p-2 rounded border small">\${s.alamat || '-'}</div>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="section-title mt-3"><i class="bi bi-people-fill me-2"></i>DATA ORANG TUA / WALI</h6>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="detail-label">Nama Ayah</div><div class="detail-value">\${s.nama_ayah || '-'}</div>
+                                            <div class="detail-label">Pekerjaan Ayah</div><div class="detail-value">\${s.pekerjaan_ayah || '-'}</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-label">Nama Ibu</div><div class="detail-value">\${s.nama_ibu || '-'}</div>
+                                            <div class="detail-label">WhatsApp</div><div class="detail-value fw-bold text-success">\${s.whatsapp_orangtua || '-'}</div>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="section-title mt-3"><i class="bi bi-file-earmark-check-fill me-2"></i>BERKAS PENDAFTARAN</h6>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-image me-1"></i> KTP Ayah</a>
+                                        <a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-file-earmark-pdf me-1"></i> Ijazah</a>
+                                        <a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-people me-1"></i> KK</a>
                                     </div>
                                 </div>
                             </div>
@@ -223,7 +231,7 @@ app.get('/admin', checkAuth, async (req, res) => {
             </html>
         `);
     } catch (e) {
-        res.status(500).send("Error: " + e.message);
+        res.status(500).send("Gagal Memuat Data: " + e.message);
     }
 });
 
