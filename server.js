@@ -9,56 +9,54 @@ const admin = require("firebase-admin");
 
 const app = express();
 
-// --- PERBAIKAN: TRUST PROXY & PARSER ---
-app.set('trust proxy', 1); 
+// --- 1. SETTINGS & MIDDLEWARE ---
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- 1. KONFIGURASI FIREBASE ---
-const serviceAccount = require("./firebase-key.json");
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
-});
-
-const db = admin.database();
-
-// --- 2. KONFIGURASI DASAR & LOGIN ---
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
-
+// Folder Uploads
 if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
-
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// --- PERBAIKAN: SESSION OPTIMIZATION ---
+// Konfigurasi Session
 app.use(session({
     secret: 'rahasia-pesantren-2026',
     resave: false,
     saveUninitialized: true,
     cookie: { 
-        secure: false, 
+        secure: false, // Set true jika menggunakan HTTPS
         maxAge: 1000 * 60 * 60 * 24 
     }
 }));
+
+// --- 2. KONFIGURASI FIREBASE ---
+const serviceAccount = require("./firebase-key.json");
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+});
+const db = admin.database();
+
+// --- 3. AUTHENTICATION HELPER ---
+const ADMIN_USER = process.env.ADMIN_USER || "admin";
+const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
 function checkAuth(req, res, next) {
     if (req.session.isAdmin) return next();
     res.redirect('/login');
 }
 
-// --- 3. PENGATURAN UPLOAD FILE ---
+// --- 4. MULTER STORAGE ---
 const storage = multer.diskStorage({
     destination: (req, file, cb) => { cb(null, 'uploads/'); },
     filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname); }
 });
 const upload = multer({ storage: storage });
 
-// --- 4. ROUTES LOGIN ---
+// --- 5. ROUTES: LOGIN & LOGOUT ---
 app.get('/login', (req, res) => {
     res.send(`
         <html>
@@ -88,24 +86,11 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
-    
-    // Pastikan variabel ADMIN_USER dan ADMIN_PASS terbaca
-    const validUser = process.env.ADMIN_USER || "admin";
-    const validPass = process.env.ADMIN_PASS || "pesantren2026";
-
-    if (username === validUser && password === validPass) {
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
-        return req.session.save((err) => {
-            if (err) {
-                console.error("Session Error:", err);
-                return res.status(500).send("Gagal menyimpan sesi");
-            }
-            console.log("Login Berhasil!");
-            res.redirect('/admin');
-        });
-    } else {
-        return res.send('Username atau Password Salah!');
+        return req.session.save(() => res.redirect('/admin'));
     }
+    res.send('Username atau Password Salah!');
 });
 
 app.get('/logout', (req, res) => {
@@ -113,11 +98,11 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
+// --- 6. ROUTES: PENDAFTARAN ---
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- 5. SIMPAN DATA KE FIREBASE ---
 const cpUpload = upload.fields([
     { name: 'foto_ktp_ayah', maxCount: 1 },
     { name: 'foto_ijazah', maxCount: 1 },
@@ -127,9 +112,7 @@ const cpUpload = upload.fields([
 
 app.post('/simpan', cpUpload, async (req, res) => {
     try {
-        if (!req.files || !req.files['foto_santri']) {
-            return res.status(400).send('File belum lengkap!');
-        }
+        if (!req.files || !req.files['foto_santri']) return res.status(400).send('File belum lengkap!');
 
         const dataBaru = {
             ...req.body,
@@ -140,9 +123,7 @@ app.post('/simpan', cpUpload, async (req, res) => {
             waktu_daftar: new Date().toLocaleString('id-ID')
         };
         
-        const pendaftarRef = db.ref("pendaftar");
-        await pendaftarRef.push(dataBaru);
-        
+        await db.ref("pendaftar").push(dataBaru);
         kirimWhatsApp(req.body.whatsapp_orangtua, req.body.nama);
 
         res.send(`
@@ -155,42 +136,24 @@ app.post('/simpan', cpUpload, async (req, res) => {
             </body>
         `);
     } catch (error) {
-        console.error(error);
         res.status(500).send("Gagal simpan ke Firebase.");
     }
 });
 
-// --- 6. PANEL ADMIN (PERBAIKAN RUTE) ---
+// --- 7. ROUTE: ADMIN PANEL ---
 app.get('/admin', checkAuth, async (req, res) => {
-    console.log("Mengambil data dari Firebase...");
-    
-    // Tambahkan timeout agar tidak loading selamanya
-    const timeout = setTimeout(() => {
-        res.status(504).send("Koneksi ke Firebase Timeout (Terlalu Lama)");
-    }, 5000);
-
     try {
         const snapshot = await db.ref("pendaftar").once("value");
-        clearTimeout(timeout); // Batalkan timeout jika berhasil
         const data = snapshot.val() || {};
-        const pendaftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        
-        // Pastikan render file admin.ejs atau berikan respon
-        res.send(`<h1>Login Berhasil</h1><pre>${JSON.stringify(pendaftar, null, 2)}</pre>`);
-    } catch (error) {
-        clearTimeout(timeout);
-        console.error("Firebase Error:", error);
-        res.status(500).send("Gagal mengambil data dari Firebase");
-    }
+        const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
-        
-        let tableRows = daftar.map((s, index) => `
+        const tableRows = daftar.map((s, index) => `
             <tr>
                 <td>${index + 1}</td>
-                <td><img src="/uploads/${s.foto_santri}" style="width:45px; height:55px; object-fit:cover;"></td>
-                <td style="text-align:left;"><b>${s.nama}</b><br><small>NIK: ${s.nik}</small></td>
-                <td>${s.sekolah_tujuan}</td>
-                <td><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank">📱 ${s.whatsapp_orangtua}</a></td>
+                <td><img src="/uploads/${s.foto_santri}" style="width:45px; height:55px; object-fit:cover; border-radius:4px;"></td>
+                <td style="text-align:left;"><b>${s.nama}</b><br><small>NIK: ${s.nik || '-'}</small></td>
+                <td>${s.sekolah_tujuan || '-'}</td>
+                <td><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" style="color:#25d366; text-decoration:none;"><b>📱 ${s.whatsapp_orangtua}</b></a></td>
                 <td>
                     <a href="/uploads/${s.foto_ktp_ayah}" target="_blank">KTP</a> | 
                     <a href="/uploads/${s.foto_ijazah}" target="_blank">Ijazah</a>
@@ -201,13 +164,13 @@ app.get('/admin', checkAuth, async (req, res) => {
         res.send(`
             <html>
             <head><title>Admin Panel</title><style>
-                body { font-family: sans-serif; background: #f0f2f5; padding: 20px; }
-                .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                body { font-family: sans-serif; background: #f0f2f5; padding: 20px; margin:0; }
+                .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 1000px; margin: auto; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
                 th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
                 th { background: #1a5928; color: white; }
-                .btn-group { margin-bottom: 20px; }
-                .btn { padding: 10px 15px; text-decoration: none; border-radius: 8px; color: white; font-weight: bold; margin-right: 5px; }
+                .btn-group { margin-bottom: 20px; display: flex; gap: 10px; }
+                .btn { padding: 10px 15px; text-decoration: none; border-radius: 8px; color: white; font-weight: bold; font-size: 14px; }
             </style></head>
             <body>
                 <div class="card">
@@ -217,18 +180,22 @@ app.get('/admin', checkAuth, async (req, res) => {
                         <a href="/hapus-semua-data" class="btn" style="background:#d35400;" onclick="return confirm('Hapus semua data?')">🗑️ Reset</a>
                         <a href="/logout" class="btn" style="background:#c0392b;">Keluar</a>
                     </div>
-                    <table>
-                        <thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>WhatsApp</th><th>Berkas</th></tr></thead>
-                        <tbody>${tableRows || '<tr><td colspan="6">Belum ada data di cloud.</td></tr>'}</tbody>
-                    </table>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>WhatsApp</th><th>Berkas</th></tr></thead>
+                            <tbody>${tableRows || '<tr><td colspan="6">Belum ada data di cloud.</td></tr>'}</tbody>
+                        </table>
+                    </div>
                 </div>
             </body>
             </html>
         `);
-    } catch (error) { res.status(500).send("Gagal ambil data Firebase."); }
+    } catch (error) {
+        res.status(500).send("Gagal mengambil data dari Firebase.");
+    }
 });
 
-// --- 7. EXPORT EXCEL & HAPUS ---
+// --- 8. EXPORT & UTILITIES ---
 app.get('/export-excel', checkAuth, async (req, res) => {
     try {
         const snapshot = await db.ref("pendaftar").once("value");
@@ -262,7 +229,7 @@ app.get('/hapus-semua-data', checkAuth, async (req, res) => {
 });
 
 async function kirimWhatsApp(nomor, nama) {
-    const token = 'TrsRNwuoLUXTnKTB6mwA'; 
+    const token = 'TrsrNwaJuLUXInTKTB6mwA'; 
     if(!nomor) return;
     try {
         await axios.post('https://api.fonnte.com/send', {
@@ -275,5 +242,5 @@ async function kirimWhatsApp(nomor, nama) {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log('✅ Server Cloud berjalan di port ' + PORT);
-});// update fix
+    console.log(`✅ Server Cloud berjalan di port ${PORT}`);
+});
