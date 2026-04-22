@@ -86,11 +86,23 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
+    console.log("Mencoba login dengan:", username); // Cek di log Railway apakah nama ini muncul
+
     if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
-        return req.session.save(() => res.redirect('/admin'));
+        // Gunakan req.session.save agar sesi benar-benar tertulis di server sebelum redirect
+        return req.session.save((err) => {
+            if (err) {
+                console.error("Gagal simpan sesi:", err);
+                return res.status(500).send("Session Error");
+            }
+            console.log("Login Berhasil, mengalihkan ke /admin...");
+            res.redirect('/admin');
+        });
+    } else {
+        console.log("Login Gagal: Username/Password salah");
+        res.send('Username atau Password Salah!');
     }
-    res.send('Username atau Password Salah!');
 });
 
 app.get('/logout', (req, res) => {
