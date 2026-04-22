@@ -161,8 +161,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                                 <h5 class="fw-bold mb-0">Detail Lengkap Santri</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
-                            <div class="modal-body p-4" id="detailContent">
-                                </div>
+                            <div class="modal-body p-4" id="detailContent"></div>
                         </div>
                     </div>
                 </div>
@@ -178,19 +177,24 @@ app.get('/admin', checkAuth, async (req, res) => {
                     });
 
                     function viewDetail(s) {
-                        // Perbaikan: Mencari variabel alternatif jika s.nisn atau s.alamat kosong
-                        const nisn_data = s.nisn || s.NISN || s.Nisn || '<span class="text-danger small italic">Belum Diisi</span>';
-                        const alamat_data = s.alamat || s.alamat_santri || s.Alamat || '-';
-                        
-                        // Perbaikan: Mencari link dokumen alternatif agar tidak undefined
-                        const link_ktp = s.foto_ktp_ayah || s.ktp_ayah || s.foto_ktp;
-                        const link_ijazah = s.foto_ijazah || s.ijazah || s.ijazah_santri;
-                        const link_kk = s.kartu_keluarga || s.kk || s.kartu_keluarga_santri;
+                        console.log("Data Santri:", s); // Cek isi data di Console Browser (F12)
+
+                        // 1. Logika Pencarian Data Teks (Cek semua kemungkinan nama field)
+                        const nisn_val = s.nisn || s.NISN || s.nisn_santri || '<span class="text-danger small italic">Belum Diisi</span>';
+                        const alamat_val = s.alamat || s.alamat_lengkap || s.Alamat || '-';
+                        const n_ayah = s.nama_ayah || s.namaAyah || '-';
+                        const n_ibu = s.nama_ibu || s.namaIbu || '-';
+
+                        // 2. Logika Pencarian Berkas (SANGAT PENTING)
+                        // Mencari file di key utama, atau key cadangan yang mungkin dibuat Multer
+                        const link_ktp = s.foto_ktp_ayah || s.ktp_ayah || s.ktp || s.foto_ktp;
+                        const link_ijazah = s.foto_ijazah || s.ijazah || s.ijazah_santri || s.file_ijazah;
+                        const link_kk = s.kartu_keluarga || s.kk || s.kk_santri || s.foto_kk;
 
                         const content = \`
                             <div class="row">
                                 <div class="col-md-4 text-center mb-4">
-                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded-4 shadow-sm border mb-3" style="max-height: 280px; width:100%; object-fit:cover;" onerror="this.src='https://via.placeholder.com/200x280'">
+                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded-4 shadow-sm border mb-3" style="max-height: 280px; width:100%; object-fit:cover;" onerror="this.src='https://via.placeholder.com/200x280?text=No+Photo'">
                                     <div class="badge bg-success w-100 py-2 fs-6">\${s.sekolah_tujuan || '-'}</div>
                                 </div>
                                 <div class="col-md-8">
@@ -198,7 +202,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                                     <div class="row">
                                         <div class="col-6">
                                             <div class="detail-label">Nama Lengkap</div><div class="detail-value text-uppercase">\${s.nama || '-'}</div>
-                                            <div class="detail-label">NISN</div><div class="detail-value">\${nisn_data}</div>
+                                            <div class="detail-label">NISN</div><div class="detail-value">\${nisn_val}</div>
                                             <div class="detail-label">NIK</div><div class="detail-value">\${s.nik || '-'}</div>
                                         </div>
                                         <div class="col-6">
@@ -207,27 +211,27 @@ app.get('/admin', checkAuth, async (req, res) => {
                                             <div class="detail-label">Asal Sekolah</div><div class="detail-value">\${s.asal_sekolah || '-'}</div>
                                         </div>
                                         <div class="col-12">
-                                            <div class="detail-label">Alamat Lengkap</div><div class="detail-value bg-light p-2 rounded border small">\${alamat_data}</div>
+                                            <div class="detail-label">Alamat Lengkap</div><div class="detail-value bg-light p-2 rounded border small mb-3">\${alamat_val}</div>
                                         </div>
                                     </div>
 
-                                    <h6 class="section-title mt-3"><i class="bi bi-people-fill me-2"></i>DATA ORANG TUA / WALI</h6>
+                                    <h6 class="section-title mt-2"><i class="bi bi-people-fill me-2"></i>DATA ORANG TUA / WALI</h6>
                                     <div class="row">
                                         <div class="col-6">
-                                            <div class="detail-label">Nama Ayah</div><div class="detail-value">\${s.nama_ayah || '-'}</div>
+                                            <div class="detail-label">Nama Ayah</div><div class="detail-value">\${n_ayah}</div>
                                             <div class="detail-label">Pekerjaan Ayah</div><div class="detail-value">\${s.pekerjaan_ayah || '-'}</div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="detail-label">Nama Ibu</div><div class="detail-value">\${s.nama_ibu || '-'}</div>
+                                            <div class="detail-label">Nama Ibu</div><div class="detail-value">\${n_ibu}</div>
                                             <div class="detail-label">WhatsApp</div><div class="detail-value fw-bold text-success">\${s.whatsapp_orangtua || '-'}</div>
                                         </div>
                                     </div>
 
-                                    <h6 class="section-title mt-3"><i class="bi bi-file-earmark-check-fill me-2"></i>BERKAS PENDAFTARAN</h6>
+                                    <h6 class="section-title mt-2"><i class="bi bi-file-earmark-check-fill me-2"></i>BERKAS PENDAFTARAN</h6>
                                     <div class="d-flex flex-wrap gap-2">
-                                        <a href="/uploads/\${link_ktp}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-image me-1"></i> KTP Ayah</a>
-                                        <a href="/uploads/\${link_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-file-earmark-pdf me-1"></i> Ijazah</a>
-                                        <a href="/uploads/\${link_kk}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-people me-1"></i> KK</a>
+                                        \${link_ktp ? \`<a href="/uploads/\${link_ktp}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-image"></i> KTP</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">KTP Kosong</button>'}
+                                        \${link_ijazah ? \`<a href="/uploads/\${link_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-file-earmark-pdf"></i> Ijazah</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">Ijazah Kosong</button>'}
+                                        \${link_kk ? \`<a href="/uploads/\${link_kk}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-people"></i> KK</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">KK Kosong</button>'}
                                     </div>
                                 </div>
                             </div>
@@ -243,6 +247,7 @@ app.get('/admin', checkAuth, async (req, res) => {
         res.status(500).send("Gagal Memuat Data: " + e.message);
     }
 });
+
 
 // --- 6. ROUTE PENDAFTARAN ---
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
