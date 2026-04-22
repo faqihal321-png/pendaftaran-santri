@@ -21,8 +21,9 @@ admin.initializeApp({
 const db = admin.database();
 
 // --- 2. KONFIGURASI DASAR & LOGIN ---
-const ADMIN_USER = "admin";
-const ADMIN_PASS = "pesantren2026"; 
+// Gunakan data dari Railway Variables, jika tidak ada baru gunakan default
+const ADMIN_USER = process.env.ADMIN_USER || "admin";
+const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
 if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
