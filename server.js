@@ -178,6 +178,15 @@ app.get('/admin', checkAuth, async (req, res) => {
                     });
 
                     function viewDetail(s) {
+                        // Perbaikan: Mencari variabel alternatif jika s.nisn atau s.alamat kosong
+                        const nisn_data = s.nisn || s.NISN || s.Nisn || '<span class="text-danger small italic">Belum Diisi</span>';
+                        const alamat_data = s.alamat || s.alamat_santri || s.Alamat || '-';
+                        
+                        // Perbaikan: Mencari link dokumen alternatif agar tidak undefined
+                        const link_ktp = s.foto_ktp_ayah || s.ktp_ayah || s.foto_ktp;
+                        const link_ijazah = s.foto_ijazah || s.ijazah || s.ijazah_santri;
+                        const link_kk = s.kartu_keluarga || s.kk || s.kartu_keluarga_santri;
+
                         const content = \`
                             <div class="row">
                                 <div class="col-md-4 text-center mb-4">
@@ -189,7 +198,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                                     <div class="row">
                                         <div class="col-6">
                                             <div class="detail-label">Nama Lengkap</div><div class="detail-value text-uppercase">\${s.nama || '-'}</div>
-                                            <div class="detail-label">NISN</div><div class="detail-value">\${s.nisn || '<span class="text-danger small italic">Belum Diisi</span>'}</div>
+                                            <div class="detail-label">NISN</div><div class="detail-value">\${nisn_data}</div>
                                             <div class="detail-label">NIK</div><div class="detail-value">\${s.nik || '-'}</div>
                                         </div>
                                         <div class="col-6">
@@ -198,7 +207,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                                             <div class="detail-label">Asal Sekolah</div><div class="detail-value">\${s.asal_sekolah || '-'}</div>
                                         </div>
                                         <div class="col-12">
-                                            <div class="detail-label">Alamat Lengkap</div><div class="detail-value bg-light p-2 rounded border small">\${s.alamat || '-'}</div>
+                                            <div class="detail-label">Alamat Lengkap</div><div class="detail-value bg-light p-2 rounded border small">\${alamat_data}</div>
                                         </div>
                                     </div>
 
@@ -216,9 +225,9 @@ app.get('/admin', checkAuth, async (req, res) => {
 
                                     <h6 class="section-title mt-3"><i class="bi bi-file-earmark-check-fill me-2"></i>BERKAS PENDAFTARAN</h6>
                                     <div class="d-flex flex-wrap gap-2">
-                                        <a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-image me-1"></i> KTP Ayah</a>
-                                        <a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-file-earmark-pdf me-1"></i> Ijazah</a>
-                                        <a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-people me-1"></i> KK</a>
+                                        <a href="/uploads/\${link_ktp}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-image me-1"></i> KTP Ayah</a>
+                                        <a href="/uploads/\${link_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-file-earmark-pdf me-1"></i> Ijazah</a>
+                                        <a href="/uploads/\${link_kk}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1"><i class="bi bi-people me-1"></i> KK</a>
                                     </div>
                                 </div>
                             </div>
