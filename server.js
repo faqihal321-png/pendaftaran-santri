@@ -75,10 +75,18 @@ app.get('/login', (req, res) => {
             <div class="login-card">
                 <h3>Login Admin</h3>
                 <form action="/login" method="POST">
-                    <input type="text" name="user" placeholder="Username" required>
-                    <input type="password" name="pass" placeholder="Password" required>
-                    <button type="submit">Masuk</button>
-                </form>
+    <div style="margin-bottom: 10px;">
+        <input type="text" name="username" placeholder="Username Admin" required 
+               style="width: 100%; padding: 10px;">
+    </div>
+    <div style="margin-bottom: 10px;">
+        <input type="password" name="password" placeholder="Password Admin" required 
+               style="width: 100%; padding: 10px;">
+    </div>
+    <button type="submit" style="width: 100%; padding: 10px; background: #2d5a27; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        Masuk
+    </button>
+</form>
             </div>
         </body>
         </html>
