@@ -90,10 +90,10 @@ app.post('/login', (req, res) => {
     const { username, password } = req.body;
     console.log("Mencoba login dengan:", username); 
 
-   if (username === ADMIN_USER && password === ADMIN_PASS) {
-    req.session.isAdmin = true;
-    res.redirect('/admin'); // <--- PASTIKAN INI ADALAH '/admin'
-    }
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
+        req.session.isAdmin = true;
+        console.log("Login Berhasil!");
+        res.redirect('/admin'); 
     } else {
         console.log("Login Gagal: Username atau Password salah");
         res.send('Username atau Password Salah!');
