@@ -18,23 +18,30 @@ if (!fs.existsSync('uploads')) { fs.mkdirSync('uploads'); }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// --- 2. FIREBASE ---
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
-});
-const db = admin.database();
+// --- 2. FIREBASE (DENGAN PROTEKSI ERROR) ---
+let db;
+try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    });
+    db = admin.database();
+    console.log("✅ Firebase Connected");
+} catch (e) {
+    console.error("❌ Firebase Error: Periksa FIREBASE_CONFIG di Railway!", e.message);
+}
 
 // --- 3. KEAMANAN LOGIN (SANGAT STABIL) ---
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
-// Fungsi pengecekan akses
 function checkAuth(req, res, next) {
-    if (req.cookies.auth_status === 'logged_in') {
+    // Menambahkan pengecekan apakah cookie auth_status ada
+    if (req.cookies && req.cookies.auth_status === 'logged_in') {
         return next();
     }
+    console.log("Akses ditolak, mengalihkan ke login...");
     res.redirect('/login');
 }
 
@@ -42,11 +49,11 @@ function checkAuth(req, res, next) {
 app.get('/login', (req, res) => {
     res.send(`
         <body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; background:#eee;">
-            <form action="/login" method="POST" style="background:white; padding:30px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
-                <h2>Login Admin</h2>
-                <input type="text" name="user" placeholder="Username" required style="width:100%; padding:10px; margin-bottom:10px;"><br>
-                <input type="password" name="pass" placeholder="Password" required style="width:100%; padding:10px; margin-bottom:10px;"><br>
-                <button type="submit" style="width:100%; padding:10px; background:green; color:white; border:none; cursor:pointer;">MASUK</button>
+            <form action="/login" method="POST" style="background:white; padding:30px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); width:300px;">
+                <h2 style="text-align:center;">Login Admin</h2>
+                <input type="text" name="user" placeholder="Username" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;"><br>
+                <input type="password" name="pass" placeholder="Password" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;"><br>
+                <button type="submit" style="width:100%; padding:10px; background:#1a5928; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">MASUK</button>
             </form>
         </body>
     `);
@@ -55,54 +62,68 @@ app.get('/login', (req, res) => {
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        // Simpan cookie di browser selama 1 hari
-        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true });
+        // Path '/' memastikan cookie bisa dibaca di semua rute halaman
+        res.cookie('auth_status', 'logged_in', { 
+            maxAge: 86400000, 
+            httpOnly: true,
+            path: '/' 
+        });
+        console.log("✅ Login Sukses, Mengalihkan...");
         res.redirect('/admin');
     } else {
-        res.send("Gagal! <a href='/login'>Ulangi</a>");
+        res.send("<script>alert('Username/Password Salah!'); window.location.href='/login';</script>");
     }
 });
 
 app.get('/logout', (req, res) => {
-    res.clearCookie('auth_status');
+    res.clearCookie('auth_status', { path: '/' });
     res.redirect('/login');
 });
 
-// --- 5. ROUTES DATA (INI YANG ANDA BUTUHKAN) ---
+// --- 5. ROUTES DATA ---
 app.get('/admin', checkAuth, async (req, res) => {
     try {
+        if (!db) throw new Error("Database tidak terhubung!");
+        
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
         let rows = daftar.map((s, i) => `
             <tr>
-                <td>${i + 1}</td>
-                <td><img src="/uploads/${s.foto_santri}" width="50" onerror="this.src='https://via.placeholder.com/50'"></td>
-                <td>${s.nama}</td>
-                <td>${s.sekolah_tujuan}</td>
-                <td><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank">Chat WA</a></td>
+                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;">${i + 1}</td>
+                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;"><img src="/uploads/${s.foto_santri}" width="50" style="border-radius:5px;" onerror="this.src='https://via.placeholder.com/50'"></td>
+                <td style="padding:10px; border-bottom:1px solid #ddd;"><b>${s.nama}</b></td>
+                <td style="padding:10px; border-bottom:1px solid #ddd;">${s.sekolah_tujuan || '-'}</td>
+                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;"><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" style="text-decoration:none; color:green; font-weight:bold;">📱 WA</a></td>
             </tr>
         `).join('');
 
         res.send(`
-            <body style="font-family:sans-serif; padding:20px;">
-                <h1>Data Santri Terdaftar</h1>
-                <a href="/logout" style="color:red;">Keluar</a> | <a href="/">Halaman Depan</a>
-                <table border="1" style="width:100%; border-collapse:collapse; margin-top:20px;">
-                    <tr style="background:#ddd;">
-                        <th>No</th><th>Foto</th><th>Nama</th><th>Tujuan</th><th>WA</th>
-                    </tr>
-                    ${rows || '<tr><td colspan="5">Belum ada data pendaftar.</td></tr>'}
-                </table>
+            <body style="font-family:sans-serif; padding:20px; background:#f4f7f6;">
+                <div style="max-width:900px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h1>Data Santri Terdaftar</h1>
+                        <div>
+                            <a href="/" style="text-decoration:none; color:blue;">Depan</a> | 
+                            <a href="/logout" style="text-decoration:none; color:red; font-weight:bold;">Keluar</a>
+                        </div>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+                        <tr style="background:#1a5928; color:white;">
+                            <th style="padding:12px;">No</th><th style="padding:12px;">Foto</th><th style="padding:12px; text-align:left;">Nama</th><th style="padding:12px; text-align:left;">Tujuan</th><th style="padding:12px;">Aksi</th>
+                        </tr>
+                        ${rows || '<tr><td colspan="5" style="text-align:center; padding:20px;">Belum ada data pendaftar.</td></tr>'}
+                    </table>
+                </div>
             </body>
         `);
     } catch (e) {
-        res.send("Firebase Error: " + e.message);
+        res.status(500).send("Gagal Memuat Data: " + e.message + ". Pastikan FIREBASE_CONFIG di Railway sudah benar!");
     }
 });
 
-// --- 6. ROUTE PENDAFTARAN (AGAR FORM TETAP JALAN) ---
+// --- 6. ROUTE PENDAFTARAN ---
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 const upload = multer({ dest: 'uploads/' });
@@ -111,11 +132,11 @@ const cpUpload = upload.fields([{ name: 'foto_ktp_ayah' }, { name: 'foto_ijazah'
 app.post('/simpan', cpUpload, async (req, res) => {
     try {
         const data = { ...req.body, waktu: new Date().toLocaleString() };
-        if (req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
+        if (req.files && req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
         await db.ref("pendaftar").push(data);
-        res.send("Berhasil! <a href='/'>Kembali</a>");
-    } catch (e) { res.send("Gagal: " + e.message); }
+        res.send("<h2>✅ Berhasil Daftar!</h2><a href='/'>Kembali ke Form</a>");
+    } catch (e) { res.status(500).send("Gagal: " + e.message); }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => { console.log("Server Aktif!"); });
+app.listen(PORT, '0.0.0.0', () => { console.log(`✅ Server Aktif di Port ${PORT}`); });
