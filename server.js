@@ -162,10 +162,27 @@ app.post('/simpan', cpUpload, async (req, res) => {
 
 // --- 6. PANEL ADMIN (PERBAIKAN RUTE) ---
 app.get('/admin', checkAuth, async (req, res) => {
+    console.log("Mengambil data dari Firebase...");
+    
+    // Tambahkan timeout agar tidak loading selamanya
+    const timeout = setTimeout(() => {
+        res.status(504).send("Koneksi ke Firebase Timeout (Terlalu Lama)");
+    }, 5000);
+
     try {
         const snapshot = await db.ref("pendaftar").once("value");
-        const dataMap = snapshot.val() || {};
-        const daftar = Object.values(dataMap).reverse(); 
+        clearTimeout(timeout); // Batalkan timeout jika berhasil
+        const data = snapshot.val() || {};
+        const pendaftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        
+        // Pastikan render file admin.ejs atau berikan respon
+        res.send(`<h1>Login Berhasil</h1><pre>${JSON.stringify(pendaftar, null, 2)}</pre>`);
+    } catch (error) {
+        clearTimeout(timeout);
+        console.error("Firebase Error:", error);
+        res.status(500).send("Gagal mengambil data dari Firebase");
+    }
+});
         
         let tableRows = daftar.map((s, index) => `
             <tr>
