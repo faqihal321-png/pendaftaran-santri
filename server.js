@@ -160,76 +160,41 @@ app.post('/simpan', cpUpload, async (req, res) => {
 
 // --- 7. ROUTE: ADMIN PANEL ---
 // 1. Tambahkan log pada checkAuth untuk memantau status login di Railway Logs
-function checkAuth(req, res, next) {
-    console.log("--- Pengecekan Sesi Admin ---");
-    console.log("Sesi ID:", req.sessionID);
-    console.log("Status isAdmin:", req.session.isAdmin);
+// 1. Tambahkan baris ini di paling atas setelah deklarasi app
+app.set('trust proxy', 1); 
 
+// 2. Middleware Pengecekan Sesi yang lebih detail
+function checkAuth(req, res, next) {
+    console.log("Cek Sesi Admin - ID:", req.sessionID);
     if (req.session && req.session.isAdmin) {
-        console.log("Akses Diterima: Masuk ke /admin");
         return next();
     }
-    
-    console.log("Akses Ditolak: Sesi kosong atau isAdmin tidak true. Mengalihkan ke /login");
+    console.log("Sesi tidak valid, kembali ke login.");
     res.redirect('/login');
 }
 
-// 2. Kode rute /admin Anda (Tetap, dengan tambahan log keberhasilan)
-app.get('/admin', checkAuth, async (req, res) => {
-    console.log("Mengambil data pendaftar dari Firebase...");
-    try {
-        const snapshot = await db.ref("pendaftar").once("value");
-        const data = snapshot.val() || {};
-        const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+// 3. Rute Login dengan Force Save
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    // Pastikan variabel ADMIN_USER & ADMIN_PASS terbaca dari Railway
+    const validUser = process.env.ADMIN_USER || "admin";
+    const validPass = process.env.ADMIN_PASS || "pesantren2026";
 
-        const tableRows = daftar.map((s, index) => `
-            <tr>
-                <td>${index + 1}</td>
-                <td><img src="/uploads/${s.foto_santri}" style="width:45px; height:55px; object-fit:cover; border-radius:4px;"></td>
-                <td style="text-align:left;"><b>${s.nama}</b><br><small>NIK: ${s.nik || '-'}</small></td>
-                <td>${s.sekolah_tujuan || '-'}</td>
-                <td><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" style="color:#25d366; text-decoration:none;"><b>📱 ${s.whatsapp_orangtua}</b></a></td>
-                <td>
-                    <a href="/uploads/${s.foto_ktp_ayah}" target="_blank">KTP</a> | 
-                    <a href="/uploads/${s.foto_ijazah}" target="_blank">Ijazah</a>
-                </td>
-            </tr>
-        `).join('');
-
-        res.send(`
-            <html>
-            <head><title>Admin Panel</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { font-family: sans-serif; background: #f0f2f5; padding: 20px; margin:0; }
-                .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 1000px; margin: auto; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
-                th { background: #1a5928; color: white; }
-                .btn-group { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-                .btn { padding: 10px 15px; text-decoration: none; border-radius: 8px; color: white; font-weight: bold; font-size: 14px; }
-            </style></head>
-            <body>
-                <div class="card">
-                    <h2>Daftar Calon Santri (Firebase Cloud)</h2>
-                    <div class="btn-group">
-                        <a href="/export-excel" class="btn" style="background:#217346;">📊 Export Excel</a>
-                        <a href="/hapus-semua-data" class="btn" style="background:#d35400;" onclick="return confirm('Hapus semua data?')">🗑️ Reset</a>
-                        <a href="/logout" class="btn" style="background:#c0392b;">Keluar</a>
-                    </div>
-                    <div style="overflow-x:auto;">
-                        <table>
-                            <thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>WhatsApp</th><th>Berkas</th></tr></thead>
-                            <tbody>${tableRows || '<tr><td colspan="6">Belum ada data di cloud.</td></tr>'}</tbody>
-                        </table>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        console.error("Firebase Error:", error);
-        res.status(500).send("Gagal mengambil data dari Firebase.");
+    if (username === validUser && password === validPass) {
+        req.session.isAdmin = true;
+        
+        // KRUSIAL: Paksa simpan sesi ke storage sebelum pindah halaman
+        req.session.save((err) => {
+            if (err) {
+                console.error("Gagal simpan sesi:", err);
+                return res.send("Gagal membuat sesi login.");
+            }
+            console.log("Login Berhasil untuk:", username);
+            res.redirect('/admin');
+        });
+    } else {
+        res.send('Username atau Password Salah!');
     }
 });
 
