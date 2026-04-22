@@ -90,11 +90,10 @@ app.post('/login', (req, res) => {
     const { username, password } = req.body;
     console.log("Mencoba login dengan:", username); 
 
-    if (username === ADMIN_USER && password === ADMIN_PASS) {
-        req.session.isAdmin = true;
-        console.log("Login Berhasil!");
-        // PERBAIKAN: Dialihkan ke /admin
-        res.redirect('/admin'); 
+   if (username === ADMIN_USER && password === ADMIN_PASS) {
+    req.session.isAdmin = true;
+    res.redirect('/admin'); // <--- PASTIKAN INI ADALAH '/admin'
+    }
     } else {
         console.log("Login Gagal: Username atau Password salah");
         res.send('Username atau Password Salah!');
@@ -252,4 +251,4 @@ async function kirimWhatsApp(nomor, nama) {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log('✅ Server Cloud berjalan di port ' + PORT);
-});
+});// update fix
