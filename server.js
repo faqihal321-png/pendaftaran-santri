@@ -10,7 +10,7 @@ const admin = require("firebase-admin");
 const app = express();
 
 // --- 1. SETTINGS & MIDDLEWARE ---
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); // Penting untuk Railway
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -21,17 +21,14 @@ if (!fs.existsSync('uploads')) {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// Tambahkan ini tepat di atas app.use(session...
-app.set('trust proxy', 1); 
-
 app.use(session({
     secret: 'rahasia-pesantren-2026',
-    resave: true, // Ubah ke true agar session selalu diperbarui
-    saveUninitialized: false, // Ubah ke false untuk alasan keamanan & stabilitas
+    resave: true,
+    saveUninitialized: false,
     proxy: true,
-    name: 'pesantren_session', // Nama cookie kustom agar tidak bentrok
+    name: 'pesantren_session',
     cookie: { 
-        secure: false, // Tetap false karena Railway mengurus SSL di layer berbeda
+        secure: false, 
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 24 
@@ -51,7 +48,11 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
 function checkAuth(req, res, next) {
-    if (req.session.isAdmin) return next();
+    console.log("Cek Sesi Admin - ID:", req.sessionID);
+    if (req.session && req.session.isAdmin) {
+        return next();
+    }
+    console.log("Sesi tidak valid, kembali ke login.");
     res.redirect('/login');
 }
 
@@ -92,21 +93,14 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
-    console.log("Mencoba login dengan:", username); // Cek di log Railway apakah nama ini muncul
-
     if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
-        // Gunakan req.session.save agar sesi benar-benar tertulis di server sebelum redirect
         return req.session.save((err) => {
-            if (err) {
-                console.error("Gagal simpan sesi:", err);
-                return res.status(500).send("Session Error");
-            }
-            console.log("Login Berhasil, mengalihkan ke /admin...");
+            if (err) return res.status(500).send("Session Error");
+            console.log("Login Berhasil untuk:", username);
             res.redirect('/admin');
         });
     } else {
-        console.log("Login Gagal: Username/Password salah");
         res.send('Username atau Password Salah!');
     }
 });
@@ -131,7 +125,6 @@ const cpUpload = upload.fields([
 app.post('/simpan', cpUpload, async (req, res) => {
     try {
         if (!req.files || !req.files['foto_santri']) return res.status(400).send('File belum lengkap!');
-
         const dataBaru = {
             ...req.body,
             foto_santri: req.files['foto_santri'][0].filename,
@@ -140,10 +133,8 @@ app.post('/simpan', cpUpload, async (req, res) => {
             kartu_keluarga: req.files['kartu_keluarga'] ? req.files['kartu_keluarga'][0].filename : '',
             waktu_daftar: new Date().toLocaleString('id-ID')
         };
-        
         await db.ref("pendaftar").push(dataBaru);
         kirimWhatsApp(req.body.whatsapp_orangtua, req.body.nama);
-
         res.send(`
             <body style="font-family:sans-serif; text-align:center; padding-top:50px; background:#e9ecef;">
                 <div style="background:white; display:inline-block; padding:40px; border-radius:20px; box-shadow:0 10px 25px rgba(0,0,0,0.1);">
@@ -153,49 +144,60 @@ app.post('/simpan', cpUpload, async (req, res) => {
                 </div>
             </body>
         `);
-    } catch (error) {
-        res.status(500).send("Gagal simpan ke Firebase.");
-    }
+    } catch (error) { res.status(500).send("Gagal simpan ke Firebase."); }
 });
 
-// --- 7. ROUTE: ADMIN PANEL ---
-// 1. Tambahkan log pada checkAuth untuk memantau status login di Railway Logs
-// 1. Tambahkan baris ini di paling atas setelah deklarasi app
-app.set('trust proxy', 1); 
+// --- 7. ROUTE: ADMIN PANEL (RUTE YANG HILANG) ---
+app.get('/admin', checkAuth, async (req, res) => {
+    try {
+        const snapshot = await db.ref("pendaftar").once("value");
+        const data = snapshot.val() || {};
+        const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
-// 2. Middleware Pengecekan Sesi yang lebih detail
-function checkAuth(req, res, next) {
-    console.log("Cek Sesi Admin - ID:", req.sessionID);
-    if (req.session && req.session.isAdmin) {
-        return next();
-    }
-    console.log("Sesi tidak valid, kembali ke login.");
-    res.redirect('/login');
-}
+        const tableRows = daftar.map((s, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td><img src="/uploads/${s.foto_santri}" style="width:45px; height:55px; object-fit:cover; border-radius:4px;"></td>
+                <td style="text-align:left;"><b>${s.nama}</b><br><small>NIK: ${s.nik || '-'}</small></td>
+                <td>${s.sekolah_tujuan || '-'}</td>
+                <td><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" style="color:#25d366; text-decoration:none;"><b>📱 WA</b></a></td>
+                <td>
+                    <a href="/uploads/${s.foto_ktp_ayah}" target="_blank">KTP</a> | 
+                    <a href="/uploads/${s.foto_ijazah}" target="_blank">Ijazah</a>
+                </td>
+            </tr>
+        `).join('');
 
-// 3. Rute Login dengan Force Save
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    
-    // Pastikan variabel ADMIN_USER & ADMIN_PASS terbaca dari Railway
-    const validUser = process.env.ADMIN_USER || "admin";
-    const validPass = process.env.ADMIN_PASS || "pesantren2026";
-
-    if (username === validUser && password === validPass) {
-        req.session.isAdmin = true;
-        
-        // KRUSIAL: Paksa simpan sesi ke storage sebelum pindah halaman
-        req.session.save((err) => {
-            if (err) {
-                console.error("Gagal simpan sesi:", err);
-                return res.send("Gagal membuat sesi login.");
-            }
-            console.log("Login Berhasil untuk:", username);
-            res.redirect('/admin');
-        });
-    } else {
-        res.send('Username atau Password Salah!');
-    }
+        res.send(`
+            <html>
+            <head><title>Admin Panel</title><style>
+                body { font-family: sans-serif; background: #f0f2f5; padding: 20px; margin:0; }
+                .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 1000px; margin: auto; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
+                th { background: #1a5928; color: white; }
+                .btn-group { margin-bottom: 20px; display: flex; gap: 10px; }
+                .btn { padding: 10px 15px; text-decoration: none; border-radius: 8px; color: white; font-weight: bold; font-size: 14px; }
+            </style></head>
+            <body>
+                <div class="card">
+                    <h2>Daftar Calon Santri (Firebase Cloud)</h2>
+                    <div class="btn-group">
+                        <a href="/export-excel" class="btn" style="background:#217346;">📊 Export Excel</a>
+                        <a href="/hapus-semua-data" class="btn" style="background:#d35400;" onclick="return confirm('Hapus semua data?')">🗑️ Reset</a>
+                        <a href="/logout" class="btn" style="background:#c0392b;">Keluar</a>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>WhatsApp</th><th>Berkas</th></tr></thead>
+                            <tbody>${tableRows || '<tr><td colspan="6">Belum ada data di cloud.</td></tr>'}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (error) { res.status(500).send("Gagal mengambil data dari Firebase."); }
 });
 
 // --- 8. EXPORT & UTILITIES ---
@@ -204,21 +206,17 @@ app.get('/export-excel', checkAuth, async (req, res) => {
         const snapshot = await db.ref("pendaftar").once("value");
         const dataMap = snapshot.val() || {};
         const daftar = Object.values(dataMap);
-
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Data Santri');
-
         worksheet.columns = [
             { header: 'No', key: 'no', width: 5 },
             { header: 'Nama Lengkap', key: 'nama', width: 25 },
             { header: 'WhatsApp', key: 'whatsapp_orangtua', width: 20 },
             { header: 'Waktu Daftar', key: 'waktu_daftar', width: 20 }
         ];
-
         daftar.forEach((s, index) => {
             worksheet.addRow({ no: index + 1, nama: s.nama, whatsapp_orangtua: s.whatsapp_orangtua, waktu_daftar: s.waktu_daftar });
         });
-
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=Data_Santri_Cloud.xlsx');
         await workbook.xlsx.write(res);
