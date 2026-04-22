@@ -21,10 +21,13 @@ app.use(express.static(__dirname));
 let db;
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+   // Ganti bagian inisialisasi admin dengan ini
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/",
+        storageBucket: "psb-pesantren.appspot.com" // Ganti dengan ID bucket Anda dari Firebase Console
     });
+    const bucket = admin.storage().bucket();
     db = admin.database();
     console.log("✅ Firebase Connected");
 } catch (e) {
@@ -261,24 +264,29 @@ const cpUpload = upload.fields([
 
 app.post('/simpan', cpUpload, async (req, res) => {
     try {
-        // Gabungkan data form teks dan waktu pendaftaran
         const data = { ...req.body, waktu: new Date().toLocaleString() };
 
-        // WAJIB: Ambil nama file asli dari Multer dan simpan ke database Firebase
         if (req.files) {
-            if (req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
-            if (req.files['foto_ktp_ayah']) data.foto_ktp_ayah = req.files['foto_ktp_ayah'][0].filename;
-            if (req.files['foto_ijazah']) data.foto_ijazah = req.files['foto_ijazah'][0].filename;
-            if (req.files['kartu_keluarga']) data.kartu_keluarga = req.files['kartu_keluarga'][0].filename;
-        }
+            for (const fieldname in req.files) {
+                const file = req.files[fieldname][0];
+                // Unggah file ke Firebase Storage agar permanen
+                const blob = bucket.file(Date.now() + "-" + file.originalname);
+                const blobStream = blob.createWriteStream({ resumable: false });
 
-        // Simpan objek data lengkap ke Firebase
-        await db.ref("pendaftar").push(data);
-        res.send("<h2>✅ Pendaftaran Berhasil!</h2><a href='/'>Kembali</a>");
-    } catch (e) {
-        console.error("Gagal Simpan:", e.message);
-        res.status(500).send("Gagal: " + e.message);
-    }
+                blobStream.on('finish', async () => {
+                    // Berikan akses publik ke file
+                    await blob.makePublic();
+                    data[fieldname] = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+                });
+                blobStream.end(file.buffer);
+            }
+        }
+        // Tunggu sebentar lalu simpan ke database
+        setTimeout(async () => {
+            await db.ref("pendaftar").push(data);
+            res.send("<h2>✅ Berhasil!</h2>");
+        }, 2000);
+    } catch (e) { res.status(500).send(e.message); }
 });
 
 const PORT = process.env.PORT || 3000;
