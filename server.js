@@ -21,13 +21,19 @@ if (!fs.existsSync('uploads')) {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// Konfigurasi Session
+// Tambahkan ini tepat di atas app.use(session...
+app.set('trust proxy', 1); 
+
 app.use(session({
     secret: 'rahasia-pesantren-2026',
-    resave: false,
-    saveUninitialized: true,
+    resave: true, // Ubah ke true agar session selalu diperbarui
+    saveUninitialized: false, // Ubah ke false untuk alasan keamanan & stabilitas
+    proxy: true,
+    name: 'pesantren_session', // Nama cookie kustom agar tidak bentrok
     cookie: { 
-        secure: false, // Set true jika menggunakan HTTPS
+        secure: false, // Tetap false karena Railway mengurus SSL di layer berbeda
+        httpOnly: true,
+        sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 24 
     }
 }));
@@ -153,7 +159,24 @@ app.post('/simpan', cpUpload, async (req, res) => {
 });
 
 // --- 7. ROUTE: ADMIN PANEL ---
+// 1. Tambahkan log pada checkAuth untuk memantau status login di Railway Logs
+function checkAuth(req, res, next) {
+    console.log("--- Pengecekan Sesi Admin ---");
+    console.log("Sesi ID:", req.sessionID);
+    console.log("Status isAdmin:", req.session.isAdmin);
+
+    if (req.session && req.session.isAdmin) {
+        console.log("Akses Diterima: Masuk ke /admin");
+        return next();
+    }
+    
+    console.log("Akses Ditolak: Sesi kosong atau isAdmin tidak true. Mengalihkan ke /login");
+    res.redirect('/login');
+}
+
+// 2. Kode rute /admin Anda (Tetap, dengan tambahan log keberhasilan)
 app.get('/admin', checkAuth, async (req, res) => {
+    console.log("Mengambil data pendaftar dari Firebase...");
     try {
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
@@ -175,13 +198,15 @@ app.get('/admin', checkAuth, async (req, res) => {
 
         res.send(`
             <html>
-            <head><title>Admin Panel</title><style>
+            <head><title>Admin Panel</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
                 body { font-family: sans-serif; background: #f0f2f5; padding: 20px; margin:0; }
                 .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 1000px; margin: auto; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
                 th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
                 th { background: #1a5928; color: white; }
-                .btn-group { margin-bottom: 20px; display: flex; gap: 10px; }
+                .btn-group { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
                 .btn { padding: 10px 15px; text-decoration: none; border-radius: 8px; color: white; font-weight: bold; font-size: 14px; }
             </style></head>
             <body>
@@ -203,6 +228,7 @@ app.get('/admin', checkAuth, async (req, res) => {
             </html>
         `);
     } catch (error) {
+        console.error("Firebase Error:", error);
         res.status(500).send("Gagal mengambil data dari Firebase.");
     }
 });
