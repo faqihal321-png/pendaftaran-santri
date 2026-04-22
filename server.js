@@ -24,12 +24,12 @@ app.use(express.static(__dirname));
 app.use(session({
     secret: 'rahasia-pesantren-2026',
     resave: true,
-    saveUninitialized: false,
+    saveUninitialized: true, // Ubah jadi true agar sesi dipaksa buat di awal
     proxy: true,
     name: 'pesantren_session',
     cookie: { 
-        secure: false, 
-        httpOnly: true,
+        secure: false, // Wajib false karena kita tidak pakai SSL sertifikat sendiri
+        httpOnly: false, // Ubah jadi false agar browser tidak terlalu ketat
         sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 24 
     }
@@ -48,11 +48,12 @@ const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
 function checkAuth(req, res, next) {
-    console.log("Cek Sesi Admin - ID:", req.sessionID);
+    console.log("Memeriksa Sesi...");
     if (req.session && req.session.isAdmin) {
+        console.log("Sesi Valid! Mengizinkan akses ke /admin");
         return next();
     }
-    console.log("Sesi tidak valid, kembali ke login.");
+    console.log("Sesi TIDAK Valid. Isi req.session saat ini:", req.session);
     res.redirect('/login');
 }
 
