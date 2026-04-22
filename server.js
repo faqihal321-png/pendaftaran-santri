@@ -182,7 +182,7 @@ app.get('/admin', checkAuth, async (req, res) => {
         console.error("Firebase Error:", error);
         res.status(500).send("Gagal mengambil data dari Firebase");
     }
-});
+
         
         let tableRows = daftar.map((s, index) => `
             <tr>
