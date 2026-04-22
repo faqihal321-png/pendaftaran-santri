@@ -8,22 +8,23 @@ const axios = require('axios');
 const admin = require("firebase-admin");
 
 const app = express();
+
+// --- PERBAIKAN: TRUST PROXY & PARSER ---
+app.set('trust proxy', 1); 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- 1. KONFIGURASI FIREBASE (Penyimpanan Aman 24 Jam) ---
-// Pastikan file firebase-key.json ada di folder yang sama dengan server.js
+// --- 1. KONFIGURASI FIREBASE ---
 const serviceAccount = require("./firebase-key.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/" // GANTI dengan URL Database Firebase Anda
+  databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
 });
 
 const db = admin.database();
 
 // --- 2. KONFIGURASI DASAR & LOGIN ---
-// Gunakan data dari Railway Variables, jika tidak ada baru gunakan default
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
@@ -31,17 +32,17 @@ if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
+
+// --- PERBAIKAN: SESSION OPTIMIZATION ---
 app.use(session({
-    secret: 'rahasia-pesantren-2026', // Bebas ganti apa saja
+    secret: 'rahasia-pesantren-2026',
     resave: false,
-    saveUninitialized: true, // Ubah ke true agar session tersimpan
+    saveUninitialized: true,
     cookie: { 
-        secure: false, // Set ke false agar bisa jalan di Railway tanpa HTTPS khusus
-        maxAge: 1000 * 60 * 60 * 24 // Login awet 24 jam
+        secure: false, 
+        maxAge: 1000 * 60 * 60 * 24 
     }
 }));
 
@@ -68,25 +69,17 @@ app.get('/login', (req, res) => {
                 body { font-family: sans-serif; background: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                 .login-card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 300px; text-align: center; }
                 input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-                button { width: 100%; padding: 10px; background: #1a5928; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+                button { width: 100%; padding: 10px; background: #2d5a27; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
             </style>
         </head>
         <body>
             <div class="login-card">
                 <h3>Login Admin</h3>
                 <form action="/login" method="POST">
-    <div style="margin-bottom: 10px;">
-        <input type="text" name="username" placeholder="Username Admin" required 
-               style="width: 100%; padding: 10px;">
-    </div>
-    <div style="margin-bottom: 10px;">
-        <input type="password" name="password" placeholder="Password Admin" required 
-               style="width: 100%; padding: 10px;">
-    </div>
-    <button type="submit" style="width: 100%; padding: 10px; background: #2d5a27; color: white; border: none; border-radius: 5px; cursor: pointer;">
-        Masuk
-    </button>
-</form>
+                    <input type="text" name="username" placeholder="Username Admin" required>
+                    <input type="password" name="password" placeholder="Password Admin" required>
+                    <button type="submit">Masuk</button>
+                </form>
             </div>
         </body>
         </html>
@@ -95,12 +88,13 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
-    console.log("Mencoba login dengan:", username); // Log untuk mengecek data masuk
+    console.log("Mencoba login dengan:", username); 
 
     if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
         console.log("Login Berhasil!");
-        res.redirect('/admin');
+        // PERBAIKAN: Dialihkan ke /admin
+        res.redirect('/admin'); 
     } else {
         console.log("Login Gagal: Username atau Password salah");
         res.send('Username atau Password Salah!');
@@ -139,7 +133,6 @@ app.post('/simpan', cpUpload, async (req, res) => {
             waktu_daftar: new Date().toLocaleString('id-ID')
         };
         
-        // Simpan ke Firebase Realtime Database
         const pendaftarRef = db.ref("pendaftar");
         await pendaftarRef.push(dataBaru);
         
@@ -160,12 +153,12 @@ app.post('/simpan', cpUpload, async (req, res) => {
     }
 });
 
-// --- 6. PANEL ADMIN (Ambil Data dari Firebase) ---
-app.get('/panel-admin-santri', checkAuth, async (req, res) => {
+// --- 6. PANEL ADMIN (PERBAIKAN RUTE) ---
+app.get('/admin', checkAuth, async (req, res) => {
     try {
         const snapshot = await db.ref("pendaftar").once("value");
         const dataMap = snapshot.val() || {};
-        const daftar = Object.values(dataMap).reverse(); // Data terbaru di atas
+        const daftar = Object.values(dataMap).reverse(); 
         
         let tableRows = daftar.map((s, index) => `
             <tr>
@@ -211,7 +204,7 @@ app.get('/panel-admin-santri', checkAuth, async (req, res) => {
     } catch (error) { res.status(500).send("Gagal ambil data Firebase."); }
 });
 
-// --- 7. EXPORT EXCEL ---
+// --- 7. EXPORT EXCEL & HAPUS ---
 app.get('/export-excel', checkAuth, async (req, res) => {
     try {
         const snapshot = await db.ref("pendaftar").once("value");
@@ -241,7 +234,7 @@ app.get('/export-excel', checkAuth, async (req, res) => {
 
 app.get('/hapus-semua-data', checkAuth, async (req, res) => {
     await db.ref("pendaftar").remove();
-    res.send("<script>alert('Data di Cloud dikosongkan!'); window.location.href='/panel-admin-santri';</script>");
+    res.send("<script>alert('Data di Cloud dikosongkan!'); window.location.href='/admin';</script>");
 });
 
 async function kirimWhatsApp(nomor, nama) {
