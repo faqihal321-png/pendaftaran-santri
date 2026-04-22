@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Pendaftaran Santri Baru</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #e9ecef; 
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Gaya Landing Page Poster */
+        #landing-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            background: #f1f3f5;
+        }
+        .poster-container {
+            max-width: 500px;
+            width: 100%;
+            background: white;
+            padding: 10px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .poster-container img {
+            width: 100%;
+            border-radius: 10px;
+            display: block;
+        }
+        .btn-daftar {
+            margin-top: 20px;
+            padding: 15px 40px;
+            background: #1b4332; /* Hijau gelap senada poster */
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(27, 67, 50, 0.3);
+        }
+        .btn-daftar:hover {
+            background: #2d6a4f;
+            transform: scale(1.05);
+        }
+
+        /* Gaya Form (Sembunyi di awal) */
+        #main-content {
+            display: none; /* Sembunyi */
+            padding-top: calc(env(safe-area-inset-top) + 20px);
+            padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+        .container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            max-width: 600px; 
+            margin: auto; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
+        h2 { text-align: center; color: #2c3e50; margin-top: 0; }
+        .section-title { background: #f8f9fa; padding: 8px 12px; border-left: 4px solid #28a745; margin: 25px 0 10px; font-weight: bold; color: #1a5928; }
+        label { display: block; margin-top: 15px; font-size: 14px; color: #555; font-weight: 600; }
+        input, select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        input:focus { border-color: #28a745; outline: none; box-shadow: 0 0 5px rgba(40, 167, 69, 0.2); }
+        button.submit-btn { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 30px; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        button.submit-btn:hover { background: #218838; transform: translateY(-1px); }
+        small { display: block; margin-top: 5px; line-height: 1.4; color: #666; font-size: 12px; }
+        .logo-header { display: flex; align-items: center; border-bottom: 3px double #2c3e50; padding-bottom: 15px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="landing-page">
+        <div class="poster-container">
+            <img src="/uploads/psb.jpg" alt="Poster PSB Ihyauth Tholibin">
+            <button class="btn-daftar" onclick="showForm()">DAFTAR SEKARANG</button>
+            <p style="font-size: 12px; color: #888; margin-top: 15px;">Klik tombol di atas untuk mengisi formulir</p>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div class="container">
+            <div class="logo-header">
+                <img src="/uploads/logo.png" style="width: 70px; height: 70px; margin-right: 15px;" alt="Logo" onerror="this.src='https://via.placeholder.com/70'">
+                <div style="text-align: left;">
+                    <h1 style="margin: 0; font-size: 18px; color: #2c3e50; text-transform: uppercase;">Pondok Pesantren Ihyauth Tholibin</h1>
+                    <p style="margin: 3px 0 0; font-size: 11px; color: #555; line-height: 1.3;">
+                        Jl. Pasar Jumat, Semarang Jaya, Air Hitam, Lampung Barat<br>
+                        Telp: +6285647834925 | +6285768084666
+                    </p>
+                </div>
+            </div>
+            
+            <form action="/simpan" method="POST" enctype="multipart/form-data">
+                <h2>Formulir Pendaftaran</h2>
+                
+                <div class="section-title">Data Calon Santri</div>
+                <input type="text" name="nim" placeholder="NISN (Nomor Induk Siswa Nasional)" required>
+                <input type="number" name="nik" placeholder="NIK (Nomor Induk Kependudukan)" required>
+                <input type="text" name="nama" placeholder="Nama Lengkap Santri" required>
+                <input type="text" name="tempat_lahir" placeholder="Tempat Lahir" required>
+                
+                <label>Tanggal Lahir</label>
+                <input type="date" name="tanggal_lahir" required>
+
+                <label>Alamat Lengkap Santri</label>
+                <textarea name="alamat" placeholder="Contoh: Dusun III, RT 01/RW 02, Desa Semarang Jaya" 
+                         style="width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; font-size: 14px;" 
+                            rows="3" required></textarea>
+
+                <label>Nomor HP/WA Santri (Opsional)</label>
+                <input type="number" name="hp_santri" placeholder="Contoh: 08123456789">
+
+                <label>Sekolah yang Akan Ditempuh:</label>
+                <select name="sekolah_tujuan" required>
+                    <option value="">-- Pilih Jenjang --</option>
+                    <option value="MADRASAH ALIYYAH">MADRASAH ALIYYAH</option>
+                    <option value="MADRASAH TSANAWIYYAH">MADRASAH TSANAWIYYAH</option>
+                </select>
+                
+                <div class="section-title">Data Orang Tua</div>
+                <input type="text" name="nama_ayah" placeholder="Nama Lengkap Ayah" required>
+                <input type="text" name="pekerjaan_ayah" placeholder="Pekerjaan Ayah" required>
+                <input type="text" name="nama_ibu" placeholder="Nama Lengkap Ibu" required>
+                <input type="text" name="pekerjaan_ibu" placeholder="Pekerjaan Ibu" required>
+
+                <label>Nomor WhatsApp Aktif Orang Tua</label>
+                <input type="number" name="whatsapp_orangtua" placeholder="Contoh: 08123456789" required>
+                <small>*Nomor ini digunakan untuk mengirim notifikasi konfirmasi pendaftaran.</small>
+
+                <div class="section-title">Upload Dokumen (Gambar/PDF)</div>
+                
+                <label>Foto Calon Santri (4x6):</label>
+                <input type="file" name="foto_santri" accept="image/*" required>
+                <small>Format: JPG/PNG</small>
+
+                <label>Foto KTP Ayah:</label>
+                <input type="file" name="foto_ktp_ayah" accept="image/*" required>
+
+                <label>Scan / Foto Kartu Keluarga:</label>
+                <input type="file" name="kartu_keluarga" accept="image/*,application/pdf" required>
+                
+                <label>Foto Ijazah Terakhir:</label>
+                <input type="file" name="foto_ijazah" accept="image/*,application/pdf" required>
+
+                <button type="submit" class="submit-btn">Kirim Pendaftaran</button>
+            </form> 
+        </div>
+    </div>
+
+    <script>
+        function showForm() {
+            // Sembunyikan Landing Page
+            document.getElementById('landing-page').style.display = 'none';
+            // Tampilkan Form
+            document.getElementById('main-content').style.display = 'block';
+            // Scroll ke atas otomatis
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>
