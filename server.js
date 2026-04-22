@@ -33,10 +33,13 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 app.use(session({
-    secret: 'kunci-rahasia-pesantren',
+    secret: 'rahasia-pesantren-2026', // Bebas ganti apa saja
     resave: false,
-    saveUninitialized: true,
-    cookie: { maxAge: 3600000 } 
+    saveUninitialized: true, // Ubah ke true agar session tersimpan
+    cookie: { 
+        secure: false, // Set ke false agar bisa jalan di Railway tanpa HTTPS khusus
+        maxAge: 1000 * 60 * 60 * 24 // Login awet 24 jam
+    }
 }));
 
 function checkAuth(req, res, next) {
@@ -80,12 +83,16 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', (req, res) => {
-    const { user, pass } = req.body;
-    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+    const { username, password } = req.body;
+    console.log("Mencoba login dengan:", username); // Log untuk mengecek data masuk
+
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
-        res.redirect('/panel-admin-santri');
+        console.log("Login Berhasil!");
+        res.redirect('/admin');
     } else {
-        res.send("<script>alert('Login Gagal!'); window.location='/login';</script>");
+        console.log("Login Gagal: Username atau Password salah");
+        res.send('Username atau Password Salah!');
     }
 });
 
