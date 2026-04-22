@@ -92,8 +92,17 @@ app.post('/login', (req, res) => {
 
     if (username === ADMIN_USER && password === ADMIN_PASS) {
         req.session.isAdmin = true;
-        console.log("Login Berhasil!");
-        res.redirect('/admin'); 
+        
+        // PERBAIKAN: Paksa server menyimpan session sebelum pindah halaman
+        req.session.save((err) => {
+            if (err) {
+                console.error("Gagal menyimpan session:", err);
+                return res.send("Terjadi kesalahan sistem saat login.");
+            }
+            console.log("Login Berhasil, menuju /admin...");
+            res.redirect('/admin'); 
+        });
+
     } else {
         console.log("Login Gagal: Username atau Password salah");
         res.send('Username atau Password Salah!');
