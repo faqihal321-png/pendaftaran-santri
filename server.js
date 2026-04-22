@@ -83,33 +83,26 @@ app.get('/logout', (req, res) => {
 // --- 5. ROUTES DATA ---
 app.get('/admin', checkAuth, async (req, res) => {
     try {
-        if (!db) throw new Error("Database tidak terhubung!");
-        
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
+        // Baris Tabel
         let rows = daftar.map((s, i) => `
             <tr>
-                <td class="text-center fw-bold">${i + 1}</td>
+                <td class="text-center">${i + 1}</td>
                 <td class="text-center">
-                    <img src="/uploads/${s.foto_santri}" class="img-thumbnail shadow-sm" style="width:60px; height:70px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/60x70?text=No+Photo'">
+                    <img src="/uploads/${s.foto_santri}" class="rounded shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60'">
                 </td>
                 <td>
-                    <div class="fw-bold text-dark">${s.nama}</div>
-                    <small class="text-muted"><i class="bi bi-card-text"></i> NIK: ${s.nik || '-'}</small>
+                    <div class="fw-bold">${s.nama}</div>
+                    <small class="text-muted">NIK: ${s.nik || '-'}</small>
                 </td>
-                <td>
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3">
-                        ${s.sekolah_tujuan || '-'}
-                    </span>
-                </td>
+                <td><span class="badge bg-success bg-opacity-10 text-success">${s.sekolah_tujuan || '-'}</span></td>
                 <td class="text-center">
-                    <div class="btn-group btn-group-sm">
-                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-outline-success" title="Hubungi WA">
-                            <i class="bi bi-whatsapp"></i> WA
-                        </a>
-                        <button class="btn btn-outline-primary" onclick="showDetail('${s.id}')" title="Detail Lengkap">
+                    <div class="btn-group">
+                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-sm btn-outline-success"><i class="bi bi-whatsapp"></i></a>
+                        <button class="btn btn-sm btn-primary" onclick='viewDetail(${JSON.stringify(s)})'>
                             <i class="bi bi-eye"></i> Detail
                         </button>
                     </div>
@@ -123,57 +116,52 @@ app.get('/admin', checkAuth, async (req, res) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Admin Panel - PSB Pesantren</title>
+                <title>Admin Panel</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
                 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
                 <style>
-                    body { background: #f0f4f8; font-family: 'Inter', sans-serif; }
-                    .navbar { background: #1a5928 !important; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                    .main-card { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-                    .table thead th { background: #f8f9fa; color: #495057; font-weight: 600; border-top: none; }
-                    .img-thumbnail { border-radius: 8px; }
+                    body { background: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+                    .navbar { background: #1a5928; }
+                    .detail-label { font-weight: bold; color: #64748b; font-size: 0.85rem; text-transform: uppercase; }
+                    .detail-value { color: #1e293b; font-weight: 500; margin-bottom: 12px; }
+                    .modal-content { border-radius: 15px; border: none; }
                 </style>
             </head>
             <body>
-                <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-                    <div class="container">
-                        <a class="navbar-brand fw-bold" href="#"><i class="bi bi-mortarboard-fill me-2"></i> Dashboard PSB</a>
-                        <div class="ms-auto">
-                            <a href="/" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-house"></i> Depan</a>
-                            <a href="/logout" class="btn btn-sm btn-danger px-3"><i class="bi bi-box-arrow-right"></i> Keluar</a>
-                        </div>
+                <nav class="navbar navbar-dark mb-4">
+                    <div class="container text-white">
+                        <span class="navbar-brand fw-bold">Dashboard Admin PSB</span>
+                        <a href="/logout" class="btn btn-sm btn-danger">Keluar</a>
                     </div>
                 </nav>
 
                 <div class="container">
-                    <div class="row mb-4">
-                        <div class="col-md-8">
-                            <h3 class="fw-bold text-dark mb-0">Daftar Calon Santri</h3>
-                            <p class="text-muted">Kelola data pendaftaran santri baru secara real-time</p>
-                        </div>
-                        <div class="col-md-4 text-md-end">
-                            <a href="/export-excel" class="btn btn-success shadow-sm rounded-pill px-4">
-                                <i class="bi bi-file-earmark-excel me-1"></i> Export Excel
-                            </a>
+                    <div class="card border-0 shadow-sm rounded-4 p-4">
+                        <h4 class="fw-bold mb-4">Daftar Santri Terdaftar</h4>
+                        <div class="table-responsive">
+                            <table id="tabelSantri" class="table table-hover align-middle">
+                                <thead>
+                                    <tr class="table-light">
+                                        <th class="text-center">No</th><th class="text-center">Foto</th><th>Nama</th><th>Jenjang</th><th class="text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows}</tbody>
+                            </table>
                         </div>
                     </div>
+                </div>
 
-                    <div class="card main-card">
-                        <div class="card-body p-4">
-                            <div class="table-responsive">
-                                <table id="tabelSantri" class="table table-hover align-middle">
-                                    <thead>
-                                        <tr>
-                                            <th class="text-center" width="5%">No</th>
-                                            <th class="text-center" width="10%">Foto</th>
-                                            <th>Nama Lengkap</th>
-                                            <th>Jenjang Tujuan</th>
-                                            <th class="text-center" width="20%">Aksi</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>${rows}</tbody>
-                                </table>
+                <div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content shadow-lg">
+                            <div class="modal-header border-0 pb-0">
+                                <h5 class="fw-bold">Detail Lengkap Santri</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body p-4">
+                                <div class="row" id="detailContent">
+                                    </div>
                             </div>
                         </div>
                     </div>
@@ -183,19 +171,52 @@ app.get('/admin', checkAuth, async (req, res) => {
                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
                 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
                 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-                
+
                 <script>
                     $(document).ready(function() {
-                        $('#tabelSantri').DataTable({
-                            language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json' },
-                            pageLength: 10,
-                            responsive: true
-                        });
+                        $('#tabelSantri').DataTable({ language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json' } });
                     });
 
-                    function showDetail(id) {
-                        alert('Fitur detail lengkap untuk ID: ' + id + ' sedang dikembangkan!');
-                        // Nanti bisa diarahkan ke halaman detail khusus per santri
+                    function viewDetail(s) {
+                        const content = \`
+                            <div class="col-md-4 text-center mb-4">
+                                <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded-4 shadow-sm border" style="max-height: 250px;">
+                                <div class="mt-3">
+                                    <span class="badge bg-success px-3 py-2">\${s.sekolah_tujuan}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="detail-label">Nama Lengkap</div>
+                                        <div class="detail-value">\${s.nama}</div>
+                                        <div class="detail-label">NIK</div>
+                                        <div class="detail-value">\${s.nik || '-'}</div>
+                                        <div class="detail-label">Tempat, Tgl Lahir</div>
+                                        <div class="detail-value">\${s.tempat_lahir || '-'}, \${s.tanggal_lahir || '-'}</div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="detail-label">Jenis Kelamin</div>
+                                        <div class="detail-value">\${s.jenis_kelamin || '-'}</div>
+                                        <div class="detail-label">WhatsApp</div>
+                                        <div class="detail-value">\${s.whatsapp_orangtua || '-'}</div>
+                                        <div class="detail-label">Asal Sekolah</div>
+                                        <div class="detail-value">\${s.asal_sekolah || '-'}</div>
+                                    </div>
+                                    <hr class="my-2">
+                                    <div class="col-12 mt-2 text-center">
+                                        <div class="detail-label mb-2">Dokumen Pendukung</div>
+                                        <div class="d-flex justify-content-center gap-2">
+                                            <a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat KTP Ayah</a>
+                                            <a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat Ijazah</a>
+                                            <a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark">Lihat KK</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        \`;
+                        document.getElementById('detailContent').innerHTML = content;
+                        new bootstrap.Modal(document.getElementById('modalDetail')).show();
                     }
                 </script>
             </body>
