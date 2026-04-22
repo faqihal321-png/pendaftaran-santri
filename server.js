@@ -12,6 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser('rahasia-pesantren-2026'));
 
+// Pastikan folder uploads tersedia
 if (!fs.existsSync('uploads')) { fs.mkdirSync('uploads'); }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
@@ -27,7 +28,7 @@ try {
     db = admin.database();
     console.log("✅ Firebase Connected");
 } catch (e) {
-    console.error("❌ Firebase Error:", e.message);
+    console.error("❌ Firebase Error: Periksa FIREBASE_CONFIG!", e.message);
 }
 
 // --- 3. KEAMANAN ---
@@ -70,87 +71,54 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- 5. ROUTE ADMIN (DASHBOARD) ---
+// --- 5. ADMIN PANEL ---
 app.get('/admin', checkAuth, async (req, res) => {
     try {
-        if (!db) throw new Error("Database tidak terhubung!");
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
         let rows = daftar.map((s, i) => `
             <tr>
-                <td class="text-center fw-bold">${i + 1}</td>
-                <td class="text-center">
-                    <img src="/uploads/${s.foto_santri}" class="img-thumbnail shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60'">
-                </td>
+                <td>${i + 1}</td>
+                <td><img src="/uploads/${s.foto_santri}" style="width:40px; height:50px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/40x50'"></td>
+                <td><b>${s.nama}</b><br><small>NISN: ${s.nisn || s.nim || '-'}</small></td>
+                <td>${s.sekolah_tujuan || '-'}</td>
                 <td>
-                    <div class="fw-bold text-dark">${s.nama}</div>
-                    <small class="text-muted">NIK: ${s.nik || '-'}</small>
-                </td>
-                <td><span class="badge bg-success bg-opacity-10 text-success">${s.sekolah_tujuan || '-'}</span></td>
-                <td class="text-center">
-                    <div class="btn-group btn-group-sm">
-                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-outline-success"><i class="bi bi-whatsapp"></i></a>
-                        <button class="btn btn-primary" onclick='viewDetail(${JSON.stringify(s)})'>
-                            <i class="bi bi-eye"></i> Detail
-                        </button>
-                    </div>
+                    <button class="btn btn-sm btn-primary" onclick='viewDetail(${JSON.stringify(s)})'>Detail</button>
                 </td>
             </tr>
         `).join('');
 
         res.send(`
             <!DOCTYPE html>
-            <html lang="id">
+            <html>
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Admin Panel - PSB</title>
+                <title>Admin PSB</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-                <style>
-                    body { background: #f8fafc; font-family: 'Segoe UI', sans-serif; }
-                    .navbar { background: #1a5928; }
-                    .section-title { border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; margin-bottom: 15px; font-weight: bold; color: #1a5928; }
-                    .detail-label { font-weight: bold; color: #64748b; font-size: 0.75rem; text-transform: uppercase; }
-                    .detail-value { color: #1e293b; font-weight: 600; margin-bottom: 10px; }
-                </style>
             </head>
-            <body>
-                <nav class="navbar navbar-dark mb-4 shadow-sm">
-                    <div class="container"><span class="navbar-brand fw-bold">Dashboard Admin PSB</span><a href="/logout" class="btn btn-sm btn-danger">Keluar</a></div>
-                </nav>
-                <div class="container">
-                    <div class="card border-0 shadow-sm rounded-4 p-4">
-                        <table class="table table-hover align-middle">
-                            <thead class="table-light"><tr><th class="text-center">No</th><th class="text-center">Foto</th><th>Nama</th><th>Jenjang</th><th class="text-center">Aksi</th></tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal fade" id="modalDetail" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-body p-4" id="detailContent"></div></div></div></div>
+            <body class="bg-light">
+                <nav class="navbar navbar-dark bg-dark mb-4"><div class="container"><span class="navbar-brand">Admin Panel</span><a href="/logout" class="btn btn-danger btn-sm">Keluar</a></div></nav>
+                <div class="container"><div class="card p-4 shadow-sm"><h3>Data Santri</h3><table class="table table-hover"><thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>Aksi</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+                <div class="modal fade" id="modalDetail" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-body" id="detailContent"></div></div></div></div>
                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
                 <script>
                     function viewDetail(s) {
                         const content = \`
                             <div class="row">
                                 <div class="col-md-4 text-center">
-                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded border shadow-sm mb-2" onerror="this.src='https://via.placeholder.com/200x250'">
+                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid border mb-2" onerror="this.src='https://via.placeholder.com/200x250'">
                                     <div class="badge bg-success w-100">\${s.sekolah_tujuan || '-'}</div>
                                 </div>
                                 <div class="col-md-8">
-                                    <h6 class="section-title">DATA PRIBADI</h6>
-                                    <div class="row">
-                                        <div class="col-6"><div class="detail-label">Nama</div><div class="detail-value">\${s.nama}</div></div>
-                                        <div class="col-6"><div class="detail-label">NISN</div><div class="detail-value">\${s.nisn || s.nim || '-'}</div></div>
-                                        <div class="col-12"><div class="detail-label">Alamat</div><div class="detail-value bg-light p-2 rounded small">\${s.alamat || '-'}</div></div>
-                                    </div>
-                                    <h6 class="section-title mt-3">BERKAS</h6>
-                                    <div class="d-flex gap-2">
-                                        \${s.foto_ktp_ayah ? \`<a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1">KTP</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">KTP Kosong</button>'}
-                                        \${s.foto_ijazah ? \`<a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1">Ijazah</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">Ijazah Kosong</button>'}
-                                        \${s.kartu_keluarga ? \`<a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark flex-grow-1">KK</a>\` : '<button class="btn btn-sm btn-light disabled flex-grow-1">KK Kosong</button>'}
+                                    <h5>Data Pribadi</h5>
+                                    <p><b>Nama:</b> \${s.nama}<br><b>NISN:</b> \${s.nisn || s.nim || '-'}<br><b>Alamat:</b> \${s.alamat || '-'}</p>
+                                    <hr>
+                                    <h5>Berkas Pendaftaran</h5>
+                                    <div class="d-grid gap-2">
+                                        \${s.foto_ktp_ayah ? \`<a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-outline-dark">Lihat KTP Ayah</a>\` : '<button class="btn btn-light disabled">KTP Ayah Kosong</button>'}
+                                        \${s.foto_ijazah ? \`<a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-outline-dark">Lihat Ijazah</a>\` : '<button class="btn btn-light disabled">Ijazah Kosong</button>'}
+                                        \${s.kartu_keluarga ? \`<a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-outline-dark">Lihat KK</a>\` : '<button class="btn btn-light disabled">KK Kosong</button>'}
                                     </div>
                                 </div>
                             </div>\`;
@@ -161,10 +129,10 @@ app.get('/admin', checkAuth, async (req, res) => {
             </body>
             </html>
         `);
-    } catch (e) { res.status(500).send("Gagal: " + e.message); }
+    } catch (e) { res.status(500).send("Error: " + e.message); }
 });
 
-// --- 6. ROUTE PENDAFTARAN (FIXED) ---
+// --- 6. ROUTE PENDAFTARAN (SOLUSI UPLOAD) ---
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 const storage = multer.diskStorage({
@@ -180,12 +148,12 @@ const cpUpload = upload.fields([
     { name: 'kartu_keluarga', maxCount: 1 }
 ]);
 
-// Hanya gunakan SATU rute simpan yaitu /simpan sesuai di form action index.html
 app.post('/simpan', cpUpload, async (req, res) => {
     try {
+        // Gabungkan data form teks dan waktu pendaftaran
         const data = { ...req.body, waktu: new Date().toLocaleString() };
 
-        // WAJIB: Simpan nama file ke database agar tidak 'undefined'
+        // WAJIB: Ambil nama file asli dari Multer dan simpan ke database Firebase
         if (req.files) {
             if (req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
             if (req.files['foto_ktp_ayah']) data.foto_ktp_ayah = req.files['foto_ktp_ayah'][0].filename;
@@ -193,11 +161,12 @@ app.post('/simpan', cpUpload, async (req, res) => {
             if (req.files['kartu_keluarga']) data.kartu_keluarga = req.files['kartu_keluarga'][0].filename;
         }
 
+        // Simpan objek data lengkap ke Firebase
         await db.ref("pendaftar").push(data);
-        res.send("<h2>✅ Pendaftaran Berhasil!</h2><p>Data Anda telah kami terima.</p><a href='/'>Kembali</a>");
+        res.send("<h2>✅ Pendaftaran Berhasil!</h2><a href='/'>Kembali</a>");
     } catch (e) {
-        console.error(e);
-        res.status(500).send("Gagal Simpan: " + e.message);
+        console.error("Gagal Simpan:", e.message);
+        res.status(500).send("Gagal: " + e.message);
     }
 });
 
