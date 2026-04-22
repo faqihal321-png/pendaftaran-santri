@@ -91,35 +91,118 @@ app.get('/admin', checkAuth, async (req, res) => {
 
         let rows = daftar.map((s, i) => `
             <tr>
-                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;">${i + 1}</td>
-                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;"><img src="/uploads/${s.foto_santri}" width="50" style="border-radius:5px;" onerror="this.src='https://via.placeholder.com/50'"></td>
-                <td style="padding:10px; border-bottom:1px solid #ddd;"><b>${s.nama}</b></td>
-                <td style="padding:10px; border-bottom:1px solid #ddd;">${s.sekolah_tujuan || '-'}</td>
-                <td style="padding:10px; text-align:center; border-bottom:1px solid #ddd;"><a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" style="text-decoration:none; color:green; font-weight:bold;">📱 WA</a></td>
+                <td class="text-center fw-bold">${i + 1}</td>
+                <td class="text-center">
+                    <img src="/uploads/${s.foto_santri}" class="img-thumbnail shadow-sm" style="width:60px; height:70px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/60x70?text=No+Photo'">
+                </td>
+                <td>
+                    <div class="fw-bold text-dark">${s.nama}</div>
+                    <small class="text-muted"><i class="bi bi-card-text"></i> NIK: ${s.nik || '-'}</small>
+                </td>
+                <td>
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3">
+                        ${s.sekolah_tujuan || '-'}
+                    </span>
+                </td>
+                <td class="text-center">
+                    <div class="btn-group btn-group-sm">
+                        <a href="https://wa.me/${s.whatsapp_orangtua}" target="_blank" class="btn btn-outline-success" title="Hubungi WA">
+                            <i class="bi bi-whatsapp"></i> WA
+                        </a>
+                        <button class="btn btn-outline-primary" onclick="showDetail('${s.id}')" title="Detail Lengkap">
+                            <i class="bi bi-eye"></i> Detail
+                        </button>
+                    </div>
+                </td>
             </tr>
         `).join('');
 
         res.send(`
-            <body style="font-family:sans-serif; padding:20px; background:#f4f7f6;">
-                <div style="max-width:900px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1);">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h1>Data Santri Terdaftar</h1>
-                        <div>
-                            <a href="/" style="text-decoration:none; color:blue;">Depan</a> | 
-                            <a href="/logout" style="text-decoration:none; color:red; font-weight:bold;">Keluar</a>
+            <!DOCTYPE html>
+            <html lang="id">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Admin Panel - PSB Pesantren</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+                <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+                <style>
+                    body { background: #f0f4f8; font-family: 'Inter', sans-serif; }
+                    .navbar { background: #1a5928 !important; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    .main-card { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+                    .table thead th { background: #f8f9fa; color: #495057; font-weight: 600; border-top: none; }
+                    .img-thumbnail { border-radius: 8px; }
+                </style>
+            </head>
+            <body>
+                <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+                    <div class="container">
+                        <a class="navbar-brand fw-bold" href="#"><i class="bi bi-mortarboard-fill me-2"></i> Dashboard PSB</a>
+                        <div class="ms-auto">
+                            <a href="/" class="btn btn-sm btn-outline-light me-2"><i class="bi bi-house"></i> Depan</a>
+                            <a href="/logout" class="btn btn-sm btn-danger px-3"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                         </div>
                     </div>
-                    <table style="width:100%; border-collapse:collapse; margin-top:20px;">
-                        <tr style="background:#1a5928; color:white;">
-                            <th style="padding:12px;">No</th><th style="padding:12px;">Foto</th><th style="padding:12px; text-align:left;">Nama</th><th style="padding:12px; text-align:left;">Tujuan</th><th style="padding:12px;">Aksi</th>
-                        </tr>
-                        ${rows || '<tr><td colspan="5" style="text-align:center; padding:20px;">Belum ada data pendaftar.</td></tr>'}
-                    </table>
+                </nav>
+
+                <div class="container">
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <h3 class="fw-bold text-dark mb-0">Daftar Calon Santri</h3>
+                            <p class="text-muted">Kelola data pendaftaran santri baru secara real-time</p>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <a href="/export-excel" class="btn btn-success shadow-sm rounded-pill px-4">
+                                <i class="bi bi-file-earmark-excel me-1"></i> Export Excel
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="card main-card">
+                        <div class="card-body p-4">
+                            <div class="table-responsive">
+                                <table id="tabelSantri" class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-center" width="5%">No</th>
+                                            <th class="text-center" width="10%">Foto</th>
+                                            <th>Nama Lengkap</th>
+                                            <th>Jenjang Tujuan</th>
+                                            <th class="text-center" width="20%">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+                <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+                <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+                
+                <script>
+                    $(document).ready(function() {
+                        $('#tabelSantri').DataTable({
+                            language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/id.json' },
+                            pageLength: 10,
+                            responsive: true
+                        });
+                    });
+
+                    function showDetail(id) {
+                        alert('Fitur detail lengkap untuk ID: ' + id + ' sedang dikembangkan!');
+                        // Nanti bisa diarahkan ke halaman detail khusus per santri
+                    }
+                </script>
             </body>
+            </html>
         `);
     } catch (e) {
-        res.status(500).send("Gagal Memuat Data: " + e.message + ". Pastikan FIREBASE_CONFIG di Railway sudah benar!");
+        res.status(500).send("Error: " + e.message);
     }
 });
 
