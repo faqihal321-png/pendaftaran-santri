@@ -8,6 +8,8 @@ const axios = require('axios');
 const admin = require("firebase-admin");
 
 const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // --- 1. KONFIGURASI FIREBASE (Penyimpanan Aman 24 Jam) ---
 // Pastikan file firebase-key.json ada di folder yang sama dengan server.js
