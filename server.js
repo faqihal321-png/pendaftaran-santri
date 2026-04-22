@@ -33,10 +33,10 @@ app.use(session({
 }));
 
 // --- 2. KONFIGURASI FIREBASE ---
-const serviceAccount = require("./firebase-key.json");
+const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
 });
 const db = admin.database();
 
