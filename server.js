@@ -88,24 +88,23 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
-    console.log("Mencoba login dengan:", username); 
+    
+    // Pastikan variabel ADMIN_USER dan ADMIN_PASS terbaca
+    const validUser = process.env.ADMIN_USER || "admin";
+    const validPass = process.env.ADMIN_PASS || "pesantren2026";
 
-    if (username === ADMIN_USER && password === ADMIN_PASS) {
+    if (username === validUser && password === validPass) {
         req.session.isAdmin = true;
-        
-        // PERBAIKAN: Paksa server menyimpan session sebelum pindah halaman
-        req.session.save((err) => {
+        return req.session.save((err) => {
             if (err) {
-                console.error("Gagal menyimpan session:", err);
-                return res.send("Terjadi kesalahan sistem saat login.");
+                console.error("Session Error:", err);
+                return res.status(500).send("Gagal menyimpan sesi");
             }
-            console.log("Login Berhasil, menuju /admin...");
-            res.redirect('/admin'); 
+            console.log("Login Berhasil!");
+            res.redirect('/admin');
         });
-
     } else {
-        console.log("Login Gagal: Username atau Password salah");
-        res.send('Username atau Password Salah!');
+        return res.send('Username atau Password Salah!');
     }
 });
 
