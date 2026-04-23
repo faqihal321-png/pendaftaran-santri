@@ -4,39 +4,43 @@ const admin = require("firebase-admin");
 
 const app = express();
 
-// --- CONFIG ---
+// --- 1. MIDDLEWARE ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- FIREBASE INITIALIZATION ---
+// --- 2. FIREBASE (PASTIKAN PENULISANNYA BENAR) ---
 let db;
 try {
     const configString = process.env.FIREBASE_CONFIG;
-    if (!configString) throw new Error("FIREBASE_CONFIG is missing in Railway Variables");
-    
-    const serviceAccount = JSON.parse(configString);
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
-    });
-    db = admin.database();
-    console.log("✅ Firebase Connected");
+    if (configString) {
+        const serviceAccount = JSON.parse(configString);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        });
+        db = admin.database();
+        console.log("✅ Firebase Connected");
+    }
 } catch (e) {
     console.log("❌ Firebase Error: " + e.message);
 }
 
-// --- ROUTES ---
-app.get('/', (req, res) => res.redirect('/login'));
+// --- 3. ROUTES ---
+app.get('/', (req, res) => {
+    res.redirect('/login');
+});
 
 app.get('/login', (req, res) => {
     res.send(`
-        <form action="/login" method="POST" style="margin:50px; font-family:sans-serif;">
-            <h2>Admin Login</h2>
-            <input name="user" placeholder="Username" required><br><br>
-            <input name="pass" type="password" placeholder="Password" required><br><br>
-            <button type="submit">Masuk</button>
-        </form>
+        <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
+            <form action="/login" method="POST" style="padding:20px; border:1px solid #ccc; border-radius:10px;">
+                <h3>Admin Login</h3>
+                <input name="user" placeholder="Username" required style="display:block;margin-bottom:10px;padding:8px;">
+                <input name="pass" type="password" placeholder="Password" required style="display:block;margin-bottom:10px;padding:8px;">
+                <button type="submit" style="width:100%;padding:10px;background:green;color:white;border:none;">Masuk</button>
+            </form>
+        </body>
     `);
 });
 
@@ -46,12 +50,7 @@ app.post('/login', (req, res) => {
     const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        res.cookie('auth_status', 'logged_in', { 
-            maxAge: 86400000, 
-            httpOnly: true, 
-            secure: true, 
-            sameSite: 'lax' 
-        });
+        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true, secure: true, sameSite: 'lax' });
         return res.redirect('/admin');
     }
     res.send("<script>alert('Gagal!'); window.location.href='/login';</script>");
@@ -59,14 +58,7 @@ app.post('/login', (req, res) => {
 
 app.get('/admin', async (req, res) => {
     if (!req.cookies || req.cookies.auth_status !== 'logged_in') return res.redirect('/login');
-    
-    try {
-        const snapshot = await db.ref("pendaftar").once("value");
-        const data = snapshot.val() || {};
-        res.send(`<h1>Panel Admin</h1><pre>${JSON.stringify(data, null, 2)}</pre><a href="/logout">Logout</a>`);
-    } catch (e) {
-        res.status(500).send("Error: " + e.message);
-    }
+    res.send("<h1>Panel Admin Berhasil Diakses!</h1><a href='/logout'>Logout</a>");
 });
 
 app.get('/logout', (req, res) => {
@@ -74,6 +66,8 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- SERVER ---
+// --- 4. LISTEN ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log("✅ Server jalan di port " + PORT));
+app.listen(PORT, '0.0.0.0', () => {
+    console.log("✅ Server jalan di port " + PORT);
+});
