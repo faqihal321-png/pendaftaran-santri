@@ -53,19 +53,24 @@ async function uploadToDrive(fileBuffer, fileName, mimeType) {
     const res = await driveService.files.create({
         requestBody: {
             name: Date.now() + '-' + fileName.replace(/\s+/g, '-'),
-            parents: [DRIVE_FOLDER_ID],
+            parents: [process.env.DRIVE_FOLDER_ID],
         },
         media: {
             mimeType: mimeType,
             body: stream,
         },
+        // Tambahkan ini untuk memastikan menggunakan izin yang benar
         fields: 'id, webViewLink',
+        supportsAllDrives: true, 
     });
 
-    // Berikan izin 'anyone with link can view' agar bisa tampil di web admin
+    // PENTING: Pindahkan file ke "milik" akun pribadi dengan memberikan izin
     await driveService.permissions.create({
         fileId: res.data.id,
-        requestBody: { role: 'reader', type: 'anyone' },
+        requestBody: { 
+            role: 'reader', 
+            type: 'anyone' 
+        },
     });
 
     return res.data.webViewLink;
