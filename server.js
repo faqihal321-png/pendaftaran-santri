@@ -44,16 +44,28 @@ app.get('/', (req, res) => {
 // Proses simpan data dari index.html
 app.post('/simpan', async (req, res) => {
     try {
+        // Mengambil data dari atribut 'name' di HTML
         const { nama, email, whatsapp } = req.body;
+
+        // Cek apakah database sudah siap
+        if (!db) {
+            throw new Error("Koneksi Firebase belum siap.");
+        }
+
         const pendaftarBaru = db.ref("pendaftar").push();
         await pendaftarBaru.set({
-            nama: nama,
+            nama: nama || "Tanpa Nama",
             email: email || "-",
             whatsapp: whatsapp || "-",
             waktu: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
         });
+
         res.send("<script>alert('Pendaftaran Berhasil!'); window.location.href='/';</script>");
-    } catch (e) { res.status(500).send("Gagal simpan data"); }
+        console.log("✅ Data berhasil disimpan untuk: " + nama);
+    } catch (e) {
+        console.log("❌ Gagal simpan ke Firebase: " + e.message);
+        res.status(500).send("Gagal simpan data: " + e.message);
+    }
 });
 
 // --- RUTE ADMIN (KHUSUS ADMIN) ---
