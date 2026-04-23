@@ -1,41 +1,41 @@
+// Update Terakhir: 23 April 10:10 - Fix Login
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const cookieParser = require('cookie-parser');
 const admin = require("firebase-admin");
 
 const app = express();
 
-// Middleware dasar
+// --- CONFIG ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser('rahasia-psb-2026'));
 
-// Folder upload
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 app.use('/uploads', express.static(uploadDir));
+app.use(express.static(__dirname));
 
-// --- INISIALISASI FIREBASE (DENGAN PROTEKSI) ---
-let db = null;
+// --- FIREBASE ---
+let db;
 try {
-    if (process.env.FIREBASE_CONFIG) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
-            databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
-        });
-        db = admin.database();
-        console.log("✅ Firebase Berhasil Terhubung");
-    } else {
-        console.error("❌ Variabel FIREBASE_CONFIG tidak ditemukan!");
-    }
-} catch (e) {
-    console.error("❌ Error Firebase Init:", e.message);
-}
+    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    });
+    db = admin.database();
+    console.log("✅ Firebase Connected");
+} catch (e) { console.log("❌ Firebase Error: " + e.message); }
 
-// --- ROUTE LOGIN (TANPA SYARAT FIREBASE) ---
-// Halaman Login
+// --- LOGIN LOGIC ---
+const ADMIN_USER = process.env.ADMIN_USER || "admin";
+const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
+
+app.get('/', (req, res) => res.redirect('/login'));
+
 app.get('/login', (req, res) => {
     res.send(`
         <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f0f2f5;">
@@ -49,42 +49,28 @@ app.get('/login', (req, res) => {
     `);
 });
 
-// Proses Login (POST)
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
-    const ADMIN_USER = process.env.ADMIN_USER || "admin";
-    const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
-
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true });
+        // PENTING: Pakai secure: true agar bisa jalan di Railway (HTTPS)
+        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true, secure: true, sameSite: 'lax' });
         return res.redirect('/admin');
     }
-    res.send("<script>alert('Login Gagal!'); window.location.href='/login';</script>");
+    res.send("<script>alert('Gagal!'); window.location.href='/login';</script>");
 });
 
 // --- ADMIN PANEL ---
 app.get('/admin', async (req, res) => {
     if (!req.cookies || req.cookies.auth_status !== 'logged_in') return res.redirect('/login');
     
-    if (!db) return res.status(500).send("Database tidak siap. Cek log Railway Anda.");
-
     try {
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         const list = Object.keys(data).map(key => ({ id: key, ...data[key] }));
 
-        let rows = list.map((s, i) => `
-            <tr>
-                <td border="1">${i+1}</td>
-                <td>${s.nama || 'Tanpa Nama'}</td>
-                <td><button onclick="alert('ID: ${s.id}')">Detail</button></td>
-            </tr>
-        `).join('');
-
-        res.send(`<h1>Admin Panel</h1><a href="/logout">Logout</a><br><table border="1" width="100%">${rows}</table>`);
-    } catch (e) {
-        res.status(500).send("Error ambil data: " + e.message);
-    }
+        let rows = list.map((s, i) => `<tr><td>${i+1}</td><td>${s.nama}</td></tr>`).join('');
+        res.send(`<h1>Panel Admin</h1><p>Total: ${list.length}</p><table border="1" width="100%">${rows}</table><br><a href="/logout">Logout</a>`);
+    } catch (e) { res.send("Error: " + e.message); }
 });
 
 app.get('/logout', (req, res) => {
@@ -92,16 +78,6 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// Root Redirect
-app.get('/', (req, res) => res.redirect('/login'));
-
-// Catch-all untuk error agar tidak layar putih polos
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Ada kesalahan di server: ' + err.message);
-});
-
-// Railway port
-app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-    console.log("✅ Server is running");
-});
+// --- LISTEN ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => console.log("✅ Server jalan di port " + PORT));
