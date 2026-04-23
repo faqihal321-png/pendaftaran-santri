@@ -4,87 +4,78 @@ const admin = require("firebase-admin");
 
 const app = express();
 
-// --- 1. CONFIGURATION ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- 2. FIREBASE INITIALIZATION ---
+// --- KONEKSI FIREBASE ---
 let db;
 try {
-    const configString = process.env.FIREBASE_CONFIG;
-    if (configString) {
-        const serviceAccount = JSON.parse(configString);
+    const config = process.env.FIREBASE_CONFIG;
+    if (config) {
+        const serviceAccount = JSON.parse(config);
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
         });
         db = admin.database();
-        console.log("✅ Firebase Berhasil Terhubung");
-    } else {
-        console.log("⚠️ FIREBASE_CONFIG tidak ditemukan");
+        console.log("✅ Firebase Terhubung");
     }
 } catch (e) {
     console.log("❌ Firebase Error: " + e.message);
 }
 
-// --- 3. ROUTES ---
+// --- HALAMAN LOGIN ---
+app.get('/', (req, res) => res.redirect('/login'));
 
-// Halaman Utama
-app.get('/', (req, res) => {
-    res.redirect('/login');
-});
-
-// Form Login
 app.get('/login', (req, res) => {
     res.send(`
-        <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f4f4f4;">
-            <form action="/login" method="POST" style="background:white;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);width:300px;">
-                <h3 style="text-align:center;margin-top:0;">Admin Login</h3>
-                <input type="text" name="user" placeholder="Username" required style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #ccc;"><br>
-                <input type="password" name="pass" placeholder="Password" required style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #ccc;"><br>
-                <button type="submit" style="width:100%;padding:10px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;">Masuk</button>
-            </form>
-        </body>
+        <form action="/login" method="POST" style="margin:50px;">
+            <h2>Login Admin</h2>
+            <input name="user" placeholder="Username"><br><br>
+            <input name="pass" type="password" placeholder="Password"><br><br>
+            <button type="submit">Masuk</button>
+        </form>
     `);
 });
 
-// Proses Login
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
+    // Password default jika belum diatur di Railway
     const ADMIN_USER = process.env.ADMIN_USER || "admin";
     const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        // Gunakan secure: true karena Railway pakai HTTPS
-        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true, secure: true, sameSite: 'lax' });
+        res.cookie('auth_status', 'logged_in', { httpOnly: true, secure: true, sameSite: 'lax' });
         return res.redirect('/admin');
     }
-    res.send("<script>alert('Gagal! Periksa User & Pass'); window.location.href='/login';</script>");
+    res.send("Login Gagal! <a href='/login'>Coba lagi</a>");
 });
 
-// Panel Admin
-app.get('/admin', (req, res) => {
-    if (!req.cookies || req.cookies.auth_status !== 'logged_in') {
-        return res.redirect('/login');
+// --- HALAMAN DATA (ADMIN) ---
+app.get('/admin', async (req, res) => {
+    if (!req.cookies || req.cookies.auth_status !== 'logged_in') return res.redirect('/login');
+    
+    try {
+        const snapshot = await db.ref("pendaftar").once("value");
+        const data = snapshot.val() || {};
+        
+        let html = "<h1>Data Pendaftar</h1><table border='1'><tr><th>Nama</th><th>Email</th></tr>";
+        Object.values(data).forEach(s => {
+            html += `<tr><td>${s.nama || '-'}</td><td>${s.email || '-'}</td></tr>`;
+        });
+        html += "</table><br><a href='/logout'>Logout</a>";
+        res.send(html);
+    } catch (e) {
+        res.send("Gagal ambil data: " + e.message);
     }
-    res.send(`
-        <div style="padding:20px;font-family:sans-serif;">
-            <h1>✅ Panel Admin Aktif</h1>
-            <p>Selamat datang! Anda berhasil login.</p>
-            <a href="/logout" style="color:red;">Keluar</a>
-        </div>
-    `);
 });
 
-// Logout
 app.get('/logout', (req, res) => {
     res.clearCookie('auth_status');
     res.redirect('/login');
 });
 
-// --- 4. START SERVER ---
+// --- START ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log("✅ Server siap di port " + PORT);
-});
+app.listen(PORT, '0.0.0.0', () => console.log("✅ Server Aktif di Port " + PORT));
