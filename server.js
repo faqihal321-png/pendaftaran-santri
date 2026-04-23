@@ -72,15 +72,19 @@ app.post('/simpan', cpUpload, async (req, res) => {
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
-app.get('/login', (req, res) => {
-    res.send(`
-        <form action="/login" method="POST" style="margin-top:50px; text-align:center;">
-            <h2>Login Admin</h2>
-            <input type="text" name="user" placeholder="Username"><br><br>
-            <input type="password" name="pass" placeholder="Password"><br><br>
-            <button type="submit">MASUK</button>
-        </form>
-    `);
+app.post('/login', (req, res) => {
+    const { user, pass } = req.body;
+    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+        // Tambahkan properti secure jika menggunakan HTTPS di Railway
+        res.cookie('auth_status', 'logged_in', { 
+            httpOnly: true, 
+            secure: true, // Wajib untuk HTTPS Railway
+            sameSite: 'lax' 
+        });
+        res.redirect('/admin');
+    } else {
+        res.send("Login Gagal! <a href='/login'>Coba lagi</a>");
+    }
 });
 
 app.post('/login', (req, res) => {
@@ -136,4 +140,6 @@ app.get('/admin', async (req, res) => {
 
 // --- 7. START SERVER ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("✅ Server jalan di port " + PORT));
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server Aktif di Port ${PORT}`);
+});
