@@ -4,17 +4,17 @@ const admin = require("firebase-admin");
 
 const app = express();
 
-// --- 1. MIDDLEWARE ---
+// --- CONFIG ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- 2. FIREBASE (PASTIKAN PENULISANNYA BENAR) ---
+// --- FIREBASE INITIALIZATION ---
 let db;
 try {
-    const configString = process.env.FIREBASE_CONFIG;
-    if (configString) {
-        const serviceAccount = JSON.parse(configString);
+    const config = process.env.FIREBASE_CONFIG;
+    if (config) {
+        const serviceAccount = JSON.parse(config);
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -26,19 +26,17 @@ try {
     console.log("❌ Firebase Error: " + e.message);
 }
 
-// --- 3. ROUTES ---
-app.get('/', (req, res) => {
-    res.redirect('/login');
-});
+// --- ROUTES ---
+app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
     res.send(`
         <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
-            <form action="/login" method="POST" style="padding:20px; border:1px solid #ccc; border-radius:10px;">
+            <form action="/login" method="POST" style="border:1px solid #ccc;padding:20px;border-radius:10px;">
                 <h3>Admin Login</h3>
                 <input name="user" placeholder="Username" required style="display:block;margin-bottom:10px;padding:8px;">
                 <input name="pass" type="password" placeholder="Password" required style="display:block;margin-bottom:10px;padding:8px;">
-                <button type="submit" style="width:100%;padding:10px;background:green;color:white;border:none;">Masuk</button>
+                <button type="submit" style="width:100%;padding:10px;background:green;color:white;border:none;cursor:pointer;">Masuk</button>
             </form>
         </body>
     `);
@@ -58,7 +56,7 @@ app.post('/login', (req, res) => {
 
 app.get('/admin', async (req, res) => {
     if (!req.cookies || req.cookies.auth_status !== 'logged_in') return res.redirect('/login');
-    res.send("<h1>Panel Admin Berhasil Diakses!</h1><a href='/logout'>Logout</a>");
+    res.send("<h1>Panel Admin Aktif</h1><a href='/logout'>Logout</a>");
 });
 
 app.get('/logout', (req, res) => {
@@ -66,8 +64,6 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- 4. LISTEN ---
+// --- SERVER ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log("✅ Server jalan di port " + PORT);
-});
+app.listen(PORT, '0.0.0.0', () => console.log("✅ Server Live on Port " + PORT));
