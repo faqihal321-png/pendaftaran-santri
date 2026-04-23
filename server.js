@@ -35,29 +35,21 @@ try {
 }
 
 // --- ROUTE LOGIN (TANPA SYARAT FIREBASE) ---
+// Halaman Login
 app.get('/login', (req, res) => {
     res.send(`
-        <html>
         <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f0f2f5;">
             <form action="/login" method="POST" style="background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1);width:300px;">
                 <h3 style="text-align:center">Admin Login</h3>
-                <hr>
-                <div style="margin-bottom:15px">
-                    <label>Username</label>
-                    <input type="text" name="user" style="width:100%;padding:8px;margin-top:5px;" required>
-                </div>
-                <div style="margin-bottom:15px">
-                    <label>Password</label>
-                    <input type="password" name="pass" style="width:100%;padding:8px;margin-top:5px;" required>
-                </div>
+                <input type="text" name="user" placeholder="Username" required style="width:100%;padding:8px;margin-bottom:10px;"><br>
+                <input type="password" name="pass" placeholder="Password" required style="width:100%;padding:8px;margin-bottom:10px;"><br>
                 <button type="submit" style="width:100%;padding:10px;background:#1a5928;color:white;border:none;border-radius:5px;cursor:pointer;">MASUK</button>
-                <p style="font-size:10px;color:grey;margin-top:10px;text-align:center">Server Status: ${db ? 'DB Connected' : 'DB Disconnected'}</p>
             </form>
         </body>
-        </html>
     `);
 });
 
+// Proses Login (POST)
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
     const ADMIN_USER = process.env.ADMIN_USER || "admin";
