@@ -44,27 +44,22 @@ app.get('/', (req, res) => {
 // Proses simpan data dari index.html
 app.post('/simpan', async (req, res) => {
     try {
-        // Mengambil data dari atribut 'name' di HTML
+        // Ambil data dari formulir
         const { nama, email, whatsapp } = req.body;
-
-        // Cek apakah database sudah siap
-        if (!db) {
-            throw new Error("Koneksi Firebase belum siap.");
-        }
 
         const pendaftarBaru = db.ref("pendaftar").push();
         await pendaftarBaru.set({
+            // Jika nama kosong, gunakan "Tanpa Nama"
             nama: nama || "Tanpa Nama",
             email: email || "-",
-            whatsapp: whatsapp || "-",
+            // Pastikan konsisten menggunakan 'whatsapp' agar terbaca di dashboard
+            whatsapp: whatsapp || "-", 
             waktu: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
         });
 
         res.send("<script>alert('Pendaftaran Berhasil!'); window.location.href='/';</script>");
-        console.log("✅ Data berhasil disimpan untuk: " + nama);
     } catch (e) {
-        console.log("❌ Gagal simpan ke Firebase: " + e.message);
-        res.status(500).send("Gagal simpan data: " + e.message);
+        res.status(500).send("Gagal simpan data");
     }
 });
 
