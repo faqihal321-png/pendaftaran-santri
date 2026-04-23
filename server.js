@@ -122,6 +122,37 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
+// --- RUTE UNTUK MENERIMA PENDAFTARAN BARU ---
+app.post('/simpan', async (req, res) => {
+    try {
+        const { nama, email, whatsapp } = req.body;
+
+        // Validasi sederhana
+        if (!nama) return res.send("Nama wajib diisi!");
+
+        // Simpan ke Firebase Realtime Database
+        const pendaftarBaru = db.ref("pendaftar").push();
+        await pendaftarBaru.set({
+            nama: nama,
+            email: email || "-",
+            whatsapp: whatsapp || "-",
+            waktu: new Date().toISOString()
+        });
+
+        // Jika sukses, beri pesan dan arahkan kembali atau kasih sukses
+        res.send(`
+            <script>
+                alert('Pendaftaran Berhasil! Data Anda sudah masuk.');
+                window.location.href = '/'; // Kembali ke halaman awal
+            </script>
+        `);
+        console.log("✅ Data santri baru masuk: " + nama);
+    } catch (error) {
+        console.log("❌ Gagal simpan: " + error.message);
+        res.status(500).send("Terjadi kesalahan pada server.");
+    }
+});
+
 // --- MENJALANKAN SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
