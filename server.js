@@ -58,17 +58,17 @@ app.get('/login', (req, res) => {
 // 3. Proses Login
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
-    
-    console.log("Mencoba login dengan:", user); // Cek di terminal vs code
 
     if (user === "admin" && pass === "pesantren2026") {
-        // Gunakan pengaturan cookie yang paling simpel untuk lokal
-        res.cookie('admin_auth', 'session_active'); 
-        console.log("✅ Login Sukses, mengalihkan ke /admin...");
+        // Pengaturan Cookie yang aman untuk Railway & Safari
+        res.cookie('admin_auth', 'session_active', {
+            httpOnly: true,
+            secure: true,      // Wajib true untuk HTTPS di Railway
+            sameSite: 'none',  // Membantu Safari menerima cookie lintas domain
+            maxAge: 24 * 60 * 60 * 1000 // Berlaku 1 hari
+        });
         return res.redirect('/admin');
     }
-    
-    console.log("❌ Login Gagal!");
     res.send("<script>alert('Login Gagal!'); window.location.href='/login';</script>");
 });
 
