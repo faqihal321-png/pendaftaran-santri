@@ -1,5 +1,5 @@
 {
-  "name": "psb-admin-panel",
+  "name": "psb-admin-lokal",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {

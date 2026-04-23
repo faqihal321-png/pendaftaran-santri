@@ -9,45 +9,47 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- INISIALISASI FIREBASE (OTOMATIS) ---
+// --- INISIALISASI FIREBASE ---
 let db;
 try {
     const config = process.env.FIREBASE_CONFIG;
     if (config) {
-        // JALAN DI RAILWAY
+        // Mode Railway (Membaca dari Environment Variable)
         admin.initializeApp({
             credential: admin.credential.cert(JSON.parse(config)),
             databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
         });
-        console.log("✅ Berhasil: Terhubung ke Firebase (Mode Railway)");
+        console.log("✅ Terhubung ke Firebase (Mode Railway)");
     } else {
-        // JALAN DI LOKAL (Pastikan file JSON ada di folder yang sama)
+        // Mode Lokal (Membaca dari file serviceAccountKey.json)
         const serviceAccount = require("./serviceAccountKey.json");
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
             databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
         });
-        console.log("✅ Berhasil: Terhubung ke Firebase (Mode Lokal)");
+        console.log("✅ Terhubung ke Firebase (Mode Lokal)");
     }
     db = admin.database();
 } catch (error) {
     console.log("❌ Error Koneksi: " + error.message);
 }
 
-// --- ROUTES ---
+// --- RUTE HALAMAN (ROUTES) ---
 
-// 1. Halaman Utama
-app.get('/', (req, res) => res.redirect('/login'));
+// 1. Halaman Utama (Sekarang otomatis pindah ke login)
+app.get('/', (req, res) => {
+    res.redirect('/login');
+});
 
-// 2. Halaman Login (Sederhana agar tidak error)
+// 2. Halaman Login
 app.get('/login', (req, res) => {
     res.send(`
-        <div style="font-family:sans-serif; text-align:center; margin-top:50px;">
-            <h2>Panel Admin Pesantren</h2>
-            <form action="/login" method="POST" style="display:inline-block; border:1px solid #ccc; padding:20px; border-radius:10px;">
-                <input name="user" placeholder="Username" required style="margin-bottom:10px; padding:8px;"><br>
-                <input name="pass" type="password" placeholder="Password" required style="margin-bottom:10px; padding:8px;"><br>
-                <button type="submit" style="width:100%; padding:10px; background:green; color:white; border:none; border-radius:5px;">Masuk</button>
+        <div style="font-family:sans-serif; text-align:center; margin-top:100px;">
+            <h2>Admin Login - PSB</h2>
+            <form action="/login" method="POST" style="display:inline-block; border:1px solid #ccc; padding:30px; border-radius:15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <input name="user" placeholder="Username" required style="display:block; width:200px; margin-bottom:10px; padding:10px;"><br>
+                <input name="pass" type="password" placeholder="Password" required style="display:block; width:200px; margin-bottom:10px; padding:10px;"><br>
+                <button type="submit" style="width:220px; padding:10px; background: #28a745; color:white; border:none; border-radius:5px; cursor:pointer;">Masuk</button>
             </form>
         </div>
     `);
@@ -56,59 +58,73 @@ app.get('/login', (req, res) => {
 // 3. Proses Login
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
-    // Ganti ini sesuai keinginan Anda
+    
+    console.log("Mencoba login dengan:", user); // Cek di terminal vs code
+
     if (user === "admin" && pass === "pesantren2026") {
-        res.cookie('status_login', 'aktif', { httpOnly: true, secure: true, sameSite: 'lax' });
+        // Gunakan pengaturan cookie yang paling simpel untuk lokal
+        res.cookie('admin_auth', 'session_active'); 
+        console.log("✅ Login Sukses, mengalihkan ke /admin...");
         return res.redirect('/admin');
     }
-    res.send("Gagal Login! <a href='/login'>Coba Lagi</a>");
+    
+    console.log("❌ Login Gagal!");
+    res.send("<script>alert('Login Gagal!'); window.location.href='/login';</script>");
 });
 
-// 4. Panel Admin (Menampilkan Data)
+// 4. Halaman Data (Admin)
 app.get('/admin', async (req, res) => {
-    if (!req.cookies || req.cookies.status_login !== 'aktif') return res.redirect('/login');
-    
+    // Cek apakah sudah login
+    if (!req.cookies || req.cookies.admin_auth !== 'session_active') {
+        return res.redirect('/login');
+    }
+
     try {
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
         
-        let tabelData = "";
-        Object.values(data).forEach(item => {
-            tabelData += `<tr>
-                <td style="border:1px solid #ddd; padding:8px;">${item.nama || '-'}</td>
-                <td style="border:1px solid #ddd; padding:8px;">${item.email || '-'}</td>
-                <td style="border:1px solid #ddd; padding:8px;">${item.whatsapp || '-'}</td>
-            </tr>`;
+        let barisTabel = "";
+        Object.keys(data).forEach(id => {
+            const santri = data[id];
+            barisTabel += `
+                <tr>
+                    <td style="border:1px solid #ddd; padding:10px;">${santri.nama || '-'}</td>
+                    <td style="border:1px solid #ddd; padding:10px;">${santri.email || '-'}</td>
+                    <td style="border:1px solid #ddd; padding:10px;">${santri.whatsapp || '-'}</td>
+                </tr>`;
         });
 
         res.send(`
-            <div style="font-family:sans-serif; padding:20px;">
-                <h1>Daftar Pendaftar Santri</h1>
-                <table style="width:100%; border-collapse:collapse;">
-                    <tr style="background:#f2f2f2;">
-                        <th style="border:1px solid #ddd; padding:8px;">Nama</th>
-                        <th style="border:1px solid #ddd; padding:8px;">Email</th>
-                        <th style="border:1px solid #ddd; padding:8px;">WhatsApp</th>
-                    </tr>
-                    ${tabelData}
+            <div style="font-family:sans-serif; padding:40px;">
+                <h1>Data Calon Santri</h1>
+                <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+                    <thead>
+                        <tr style="background:#f8f9fa; text-align:left;">
+                            <th style="border:1px solid #ddd; padding:12px;">Nama</th>
+                            <th style="border:1px solid #ddd; padding:12px;">Email</th>
+                            <th style="border:1px solid #ddd; padding:12px;">WhatsApp</th>
+                        </tr>
+                    </thead>
+                    <tbody>${barisTabel}</tbody>
                 </table>
                 <br>
-                <a href="/logout" style="color:red;">Keluar/Logout</a>
+                <a href="/logout" style="color:red; text-decoration:none;">[ Logout ]</a>
             </div>
         `);
     } catch (e) {
-        res.send("Gagal mengambil data Firebase: " + e.message);
+        res.send("Error Database: " + e.message);
     }
 });
 
 // 5. Logout
 app.get('/logout', (req, res) => {
-    res.clearCookie('status_login');
+    res.clearCookie('admin_auth');
     res.redirect('/login');
 });
 
 // --- MENJALANKAN SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log("✅ Server jalan di port: " + PORT);
+    console.log("🚀 Server Berjalan!");
+    console.log("👉 Buka di browser: http://localhost:" + PORT);
 });
