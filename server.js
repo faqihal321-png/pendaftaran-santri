@@ -1,8 +1,4 @@
-// Update Terakhir: 23 April 10:10 - Fix Login
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 const cookieParser = require('cookie-parser');
 const admin = require("firebase-admin");
 
@@ -11,66 +7,66 @@ const app = express();
 // --- CONFIG ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser('rahasia-psb-2026'));
+app.use(cookieParser());
 
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-app.use('/uploads', express.static(uploadDir));
-app.use(express.static(__dirname));
-
-// --- FIREBASE ---
+// --- FIREBASE INITIALIZATION ---
 let db;
 try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+    const configString = process.env.FIREBASE_CONFIG;
+    if (!configString) throw new Error("FIREBASE_CONFIG is missing in Railway Variables");
+    
+    const serviceAccount = JSON.parse(configString);
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
     });
     db = admin.database();
     console.log("✅ Firebase Connected");
-} catch (e) { console.log("❌ Firebase Error: " + e.message); }
+} catch (e) {
+    console.log("❌ Firebase Error: " + e.message);
+}
 
-// --- LOGIN LOGIC ---
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
-
+// --- ROUTES ---
 app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
     res.send(`
-        <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f0f2f5;">
-            <form action="/login" method="POST" style="background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1);width:300px;">
-                <h3 style="text-align:center">Admin Login</h3>
-                <input type="text" name="user" placeholder="Username" required style="width:100%;padding:8px;margin-bottom:10px;"><br>
-                <input type="password" name="pass" placeholder="Password" required style="width:100%;padding:8px;margin-bottom:10px;"><br>
-                <button type="submit" style="width:100%;padding:10px;background:#1a5928;color:white;border:none;border-radius:5px;cursor:pointer;">MASUK</button>
-            </form>
-        </body>
+        <form action="/login" method="POST" style="margin:50px; font-family:sans-serif;">
+            <h2>Admin Login</h2>
+            <input name="user" placeholder="Username" required><br><br>
+            <input name="pass" type="password" placeholder="Password" required><br><br>
+            <button type="submit">Masuk</button>
+        </form>
     `);
 });
 
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
+    const ADMIN_USER = process.env.ADMIN_USER || "admin";
+    const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
+
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        // PENTING: Pakai secure: true agar bisa jalan di Railway (HTTPS)
-        res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true, secure: true, sameSite: 'lax' });
+        res.cookie('auth_status', 'logged_in', { 
+            maxAge: 86400000, 
+            httpOnly: true, 
+            secure: true, 
+            sameSite: 'lax' 
+        });
         return res.redirect('/admin');
     }
     res.send("<script>alert('Gagal!'); window.location.href='/login';</script>");
 });
 
-// --- ADMIN PANEL ---
 app.get('/admin', async (req, res) => {
     if (!req.cookies || req.cookies.auth_status !== 'logged_in') return res.redirect('/login');
     
     try {
         const snapshot = await db.ref("pendaftar").once("value");
         const data = snapshot.val() || {};
-        const list = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-
-        let rows = list.map((s, i) => `<tr><td>${i+1}</td><td>${s.nama}</td></tr>`).join('');
-        res.send(`<h1>Panel Admin</h1><p>Total: ${list.length}</p><table border="1" width="100%">${rows}</table><br><a href="/logout">Logout</a>`);
-    } catch (e) { res.send("Error: " + e.message); }
+        res.send(`<h1>Panel Admin</h1><pre>${JSON.stringify(data, null, 2)}</pre><a href="/logout">Logout</a>`);
+    } catch (e) {
+        res.status(500).send("Error: " + e.message);
+    }
 });
 
 app.get('/logout', (req, res) => {
@@ -78,6 +74,6 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- LISTEN ---
+// --- SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log("✅ Server jalan di port " + PORT));
