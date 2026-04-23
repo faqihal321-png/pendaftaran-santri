@@ -1,39 +1,77 @@
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const multer = require('multer');
 const cookieParser = require('cookie-parser');
 const admin = require("firebase-admin");
+const { google } = require('googleapis');
+const { Readable } = require('stream');
 
 const app = express();
 
-// --- 1. KONFIGURASI DASAR & FOLDER UPLOAD ---
+// --- 1. KONFIGURASI DASAR ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser('rahasia-pesantren-2026'));
-
-// Otomatis membuat folder 'uploads' jika belum ada
-if (!fs.existsSync('uploads')) { fs.mkdirSync('uploads'); }
-// Akses folder uploads agar foto bisa dilihat di browser
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// --- 2. FIREBASE REALTIME DATABASE SAJA ---
+// --- 2. FIREBASE REALTIME DATABASE ---
 let db;
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        // Pastikan URL database ini sesuai dengan milik Anda
         databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
     });
     db = admin.database();
-    console.log("✅ Firebase Database Connected (Tanpa Storage)");
+    console.log("✅ Firebase Database Connected");
 } catch (e) {
     console.error("❌ Firebase Error:", e.message);
 }
 
-// --- 3. KEAMANAN ADMIN ---
+// --- 3. GOOGLE DRIVE API CONFIG ---
+const DRIVE_FOLDER_ID = process.env.DRIVE_FOLDER_ID; // Ambil dari Variable Railway
+let driveService;
+
+try {
+    const driveKeys = JSON.parse(process.env.GOOGLE_DRIVE_CONFIG); // Ambil JSON Key dari Variable Railway
+    const auth = new google.auth.GoogleAuth({
+        credentials: driveKeys,
+        scopes: ['https://www.googleapis.com/auth/drive.file'],
+    });
+    driveService = google.drive({ version: 'v3', auth });
+    console.log("✅ Google Drive API Connected");
+} catch (e) {
+    console.error("❌ Google Drive Error:", e.message);
+}
+
+// Fungsi Upload ke Google Drive
+async function uploadToDrive(fileBuffer, fileName, mimeType) {
+    const stream = new Readable();
+    stream.push(fileBuffer);
+    stream.push(null);
+
+    const res = await driveService.files.create({
+        requestBody: {
+            name: Date.now() + '-' + fileName.replace(/\s+/g, '-'),
+            parents: [DRIVE_FOLDER_ID],
+        },
+        media: {
+            mimeType: mimeType,
+            body: stream,
+        },
+        fields: 'id, webViewLink',
+    });
+
+    // Berikan izin 'anyone with link can view' agar bisa tampil di web admin
+    await driveService.permissions.create({
+        fileId: res.data.id,
+        requestBody: { role: 'reader', type: 'anyone' },
+    });
+
+    return res.data.webViewLink;
+}
+
+// --- 4. KEAMANAN ADMIN ---
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
@@ -42,7 +80,18 @@ function checkAuth(req, res, next) {
     res.redirect('/login');
 }
 
-// --- 4. ROUTE LOGIN ---
+// --- 5. SETUP MULTER (MEMORY STORAGE) ---
+// Kita pakai MemoryStorage agar file tidak mampir ke disk Railway
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+const uploadFields = upload.fields([
+    { name: 'foto_santri', maxCount: 1 },
+    { name: 'foto_ktp_ayah', maxCount: 1 },
+    { name: 'foto_ijazah', maxCount: 1 },
+    { name: 'kartu_keluarga', maxCount: 1 }
+]);
+
+// --- 6. ROUTES ---
 app.get('/login', (req, res) => {
     res.send(`
         <body style="display:flex; justify-content:center; align-items:center; height:100vh; background:#eee; font-family:sans-serif;">
@@ -70,42 +119,21 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- 5. SETUP MULTER UNTUK SIMPAN FILE KE LOKAL ---
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/'); // Simpan ke folder uploads
-    },
-    filename: function (req, file, cb) {
-        // Nama file = Waktu saat ini + nama asli file (agar tidak bentrok)
-        const safeName = file.originalname.replace(/\s+/g, '-');
-        cb(null, Date.now() + '-' + safeName);
-    }
-});
-
-const upload = multer({ storage: storage });
-const uploadFields = upload.fields([
-    { name: 'foto_santri', maxCount: 1 },
-    { name: 'foto_ktp_ayah', maxCount: 1 },
-    { name: 'foto_ijazah', maxCount: 1 },
-    { name: 'kartu_keluarga', maxCount: 1 }
-]);
-
-// --- 6. ROUTE PENDAFTARAN ---
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 app.post('/simpan', uploadFields, async (req, res) => {
     try {
         let data = { ...req.body, waktu: new Date().toLocaleString() };
 
-        // Masukkan nama file yang diupload ke dalam data
         if (req.files) {
-            if (req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
-            if (req.files['foto_ktp_ayah']) data.foto_ktp_ayah = req.files['foto_ktp_ayah'][0].filename;
-            if (req.files['foto_ijazah']) data.foto_ijazah = req.files['foto_ijazah'][0].filename;
-            if (req.files['kartu_keluarga']) data.kartu_keluarga = req.files['kartu_keluarga'][0].filename;
+            // Proses upload setiap file yang ada ke Google Drive
+            for (const fieldName in req.files) {
+                const file = req.files[fieldName][0];
+                const driveLink = await uploadToDrive(file.buffer, file.originalname, file.mimetype);
+                data[fieldName] = driveLink; // Ganti nama file dengan LINK Drive
+            }
         }
 
-        // Simpan teks dan nama file ke Firebase Database
         if (db) {
             await db.ref("pendaftar").push(data);
         }
@@ -113,11 +141,12 @@ app.post('/simpan', uploadFields, async (req, res) => {
         res.send(`
             <div style="text-align:center; padding:50px; font-family:sans-serif;">
                 <h2 style="color:green;">✅ Pendaftaran Berhasil!</h2>
-                <p>Data dan berkas Anda telah tersimpan.</p>
+                <p>Data telah tersimpan permanen di Google Drive & Firebase.</p>
                 <a href="/" style="padding:10px 20px; background:#1a5928; color:white; text-decoration:none; border-radius:5px;">Kembali ke Form</a>
             </div>
         `);
     } catch (e) {
+        console.error(e);
         res.status(500).send("Error: " + e.message);
     }
 });
@@ -136,11 +165,11 @@ app.get('/admin', checkAuth, async (req, res) => {
             <tr class="align-middle">
                 <td class="text-center">${i + 1}</td>
                 <td class="text-center">
-                    <img src="/uploads/${s.foto_santri}" class="rounded shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60?text=No+Photo'">
+                    <img src="${s.foto_santri}" class="rounded shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60?text=No+Photo'">
                 </td>
                 <td>
                     <strong>${s.nama}</strong><br>
-                    <small class="text-muted">${s.nisn || s.nim || '-'}</small>
+                    <small class="text-muted">${s.nisn || s.nik || '-'}</small>
                 </td>
                 <td><span class="badge bg-success">${s.sekolah_tujuan || '-'}</span></td>
                 <td class="text-center">
@@ -159,7 +188,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                 <style> body { background: #f4f6f9; } .navbar { background: #1a5928; } </style>
             </head>
             <body>
-                <nav class="navbar navbar-dark mb-4"><div class="container"><span class="navbar-brand">Dashboard Admin</span><a href="/logout" class="btn btn-sm btn-light">Logout</a></div></nav>
+                <nav class="navbar navbar-dark mb-4"><div class="container"><span class="navbar-brand">Dashboard Admin (Google Drive Storage)</span><a href="/logout" class="btn btn-sm btn-light">Logout</a></div></nav>
                 <div class="container">
                     <div class="card p-4 shadow-sm border-0 rounded-4">
                         <table class="table table-hover">
@@ -180,7 +209,7 @@ app.get('/admin', checkAuth, async (req, res) => {
                         const content = \`
                             <div class="row">
                                 <div class="col-md-4 text-center">
-                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded mb-3" onerror="this.src='https://via.placeholder.com/200x250?text=No+Photo'">
+                                    <img src="\${s.foto_santri}" class="img-fluid rounded mb-3" onerror="this.src='https://via.placeholder.com/200x250?text=No+Photo'">
                                     <a href="https://wa.me/\${s.whatsapp_orangtua}" target="_blank" class="btn btn-success w-100">Chat WhatsApp</a>
                                 </div>
                                 <div class="col-md-8">
@@ -191,11 +220,11 @@ app.get('/admin', checkAuth, async (req, res) => {
                                         <tr><th>Alamat</th><td>\${s.alamat}</td></tr>
                                         <tr><th>Nama Ayah</th><td>\${s.nama_ayah} (\${s.pekerjaan_ayah})</td></tr>
                                     </table>
-                                    <h6>Berkas Digital:</h6>
+                                    <h6>Berkas Digital (Google Drive):</h6>
                                     <div class="d-flex gap-2">
-                                        \${s.foto_ktp_ayah ? \`<a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark">KTP Ayah</a>\` : ''}
-                                        \${s.foto_ijazah ? \`<a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark">Ijazah</a>\` : ''}
-                                        \${s.kartu_keluarga ? \`<a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark">Kartu Keluarga</a>\` : ''}
+                                        \${s.foto_ktp_ayah ? \`<a href="\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark">KTP Ayah</a>\` : ''}
+                                        \${s.foto_ijazah ? \`<a href="\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark">Ijazah</a>\` : ''}
+                                        \${s.kartu_keluarga ? \`<a href="\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark">Kartu Keluarga</a>\` : ''}
                                     </div>
                                 </div>
                             </div>
