@@ -110,5 +110,5 @@ app.get('/logout', (req, res) => {
 // --- MENJALANKAN SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log("🚀 Server siap di port " + PORT);
+    console.log("✅ Server jalan di port: " + PORT);
 });

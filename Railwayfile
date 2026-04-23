@@ -1,0 +1,3 @@
+# Menginstruksikan Railway untuk menjalankan node secara langsung
+build: npm install
+start: node server.js
