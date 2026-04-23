@@ -7,52 +7,45 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// --- FIREBASE SETUP ---
+// --- DATABASE ---
 let db;
 try {
     const config = process.env.FIREBASE_CONFIG;
     if (config) {
-        const serviceAccount = JSON.parse(config);
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+            credential: admin.credential.cert(JSON.parse(config)),
             databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
         });
         db = admin.database();
-        console.log("✅ Firebase Connected");
+        console.log("✅ Database OK");
     }
-} catch (e) {
-    console.log("❌ Firebase Error: " + e.message);
-}
+} catch (e) { console.log("❌ DB Error: " + e.message); }
 
-// --- ROUTES ---
+// --- LOGIN ---
 app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
-    res.send('<h2>Login Admin</h2><form action="/login" method="POST"><input name="user" placeholder="User"><br><input name="pass" type="password" placeholder="Pass"><br><button type="submit">Masuk</button></form>');
+    res.send('<form action="/login" method="POST"><h2>Admin</h2><input name="user"><input name="pass" type="password"><button>Login</button></form>');
 });
 
 app.post('/login', (req, res) => {
     const { user, pass } = req.body;
-    if (user === (process.env.ADMIN_USER || "admin") && pass === (process.env.ADMIN_PASS || "pesantren2026")) {
-        res.cookie('auth', 'ok', { httpOnly: true, secure: true, sameSite: 'lax' });
+    if (user === "admin" && pass === "pesantren2026") {
+        res.cookie('auth', 'yes', { httpOnly: true, secure: true, sameSite: 'lax' });
         return res.redirect('/admin');
     }
-    res.send("Gagal! <a href='/login'>Kembali</a>");
+    res.send("Gagal!");
 });
 
+// --- LIHAT DATA ---
 app.get('/admin', async (req, res) => {
-    if (req.cookies.auth !== 'ok') return res.redirect('/login');
+    if (req.cookies.auth !== 'yes') return res.redirect('/login');
     try {
         const snap = await db.ref("pendaftar").once("value");
-        res.send(`<h1>Data Pendaftar</h1><pre>${JSON.stringify(snap.val(), null, 2)}</pre><br><a href="/logout">Logout</a>`);
+        res.send(`<h1>Data Santri</h1><pre>${JSON.stringify(snap.val(), null, 2)}</pre>`);
     } catch (e) { res.send("Error: " + e.message); }
 });
 
-app.get('/logout', (req, res) => {
-    res.clearCookie('auth');
-    res.redirect('/login');
-});
-
-// --- START SERVER ---
+// --- SERVER ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log("✅ Server jalan di port " + PORT));
+app.listen(PORT, '0.0.0.0', () => console.log("🚀 Server Nyala!"));
