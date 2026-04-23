@@ -7,32 +7,33 @@ const admin = require("firebase-admin");
 
 const app = express();
 
-// --- 1. KONFIGURASI DASAR ---
+// --- 1. KONFIGURASI DASAR & FOLDER UPLOAD ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser('rahasia-pesantren-2026'));
+
+// Otomatis membuat folder 'uploads' jika belum ada
+if (!fs.existsSync('uploads')) { fs.mkdirSync('uploads'); }
+// Akses folder uploads agar foto bisa dilihat di browser
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
-// --- 2. FIREBASE & STORAGE ---
+// --- 2. FIREBASE REALTIME DATABASE SAJA ---
 let db;
-let bucket;
-
 try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/",
-        storageBucket: "psb-pesantren-default-rtdb.appspot.com" 
+        // Pastikan URL database ini sesuai dengan milik Anda
+        databaseURL: "https://psb-pesantren-default-rtdb.asia-southeast1.firebasedatabase.app/"
     });
-    
     db = admin.database();
-    bucket = admin.storage().bucket();
-    console.log("✅ Firebase & Storage Connected");
+    console.log("✅ Firebase Database Connected (Tanpa Storage)");
 } catch (e) {
     console.error("❌ Firebase Error:", e.message);
 }
 
-// --- 3. KEAMANAN ---
+// --- 3. KEAMANAN ADMIN ---
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "pesantren2026";
 
@@ -41,27 +42,26 @@ function checkAuth(req, res, next) {
     res.redirect('/login');
 }
 
-// --- 4. ROUTES LOGIN ---
+// --- 4. ROUTE LOGIN ---
 app.get('/login', (req, res) => {
     res.send(`
-        <body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; background:#eee;">
+        <body style="display:flex; justify-content:center; align-items:center; height:100vh; background:#eee; font-family:sans-serif;">
             <form action="/login" method="POST" style="background:white; padding:30px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1); width:300px;">
                 <h2 style="text-align:center;">Login Admin</h2>
-                <input type="text" name="user" placeholder="Username" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;"><br>
-                <input type="password" name="pass" placeholder="Password" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;"><br>
-                <button type="submit" style="width:100%; padding:10px; background:#1a5928; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">MASUK</button>
+                <input type="text" name="user" placeholder="Username" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;">
+                <input type="password" name="pass" placeholder="Password" required style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:5px;">
+                <button type="submit" style="width:100%; padding:10px; background:#1a5928; color:white; border:none; border-radius:5px; cursor:pointer;">MASUK</button>
             </form>
         </body>
     `);
 });
 
 app.post('/login', (req, res) => {
-    const { user, pass } = req.body;
-    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+    if (req.body.user === ADMIN_USER && req.body.pass === ADMIN_PASS) {
         res.cookie('auth_status', 'logged_in', { maxAge: 86400000, httpOnly: true, path: '/' });
         res.redirect('/admin');
     } else {
-        res.send("<script>alert('Username/Password Salah!'); window.location.href='/login';</script>");
+        res.send("<script>alert('Password Salah!'); window.location.href='/login';</script>");
     }
 });
 
@@ -70,34 +70,81 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
-// --- 5. ADMIN PANEL ---
+// --- 5. SETUP MULTER UNTUK SIMPAN FILE KE LOKAL ---
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/'); // Simpan ke folder uploads
+    },
+    filename: function (req, file, cb) {
+        // Nama file = Waktu saat ini + nama asli file (agar tidak bentrok)
+        const safeName = file.originalname.replace(/\s+/g, '-');
+        cb(null, Date.now() + '-' + safeName);
+    }
+});
+
+const upload = multer({ storage: storage });
+const uploadFields = upload.fields([
+    { name: 'foto_santri', maxCount: 1 },
+    { name: 'foto_ktp_ayah', maxCount: 1 },
+    { name: 'foto_ijazah', maxCount: 1 },
+    { name: 'kartu_keluarga', maxCount: 1 }
+]);
+
+// --- 6. ROUTE PENDAFTARAN ---
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
+
+app.post('/simpan', uploadFields, async (req, res) => {
+    try {
+        let data = { ...req.body, waktu: new Date().toLocaleString() };
+
+        // Masukkan nama file yang diupload ke dalam data
+        if (req.files) {
+            if (req.files['foto_santri']) data.foto_santri = req.files['foto_santri'][0].filename;
+            if (req.files['foto_ktp_ayah']) data.foto_ktp_ayah = req.files['foto_ktp_ayah'][0].filename;
+            if (req.files['foto_ijazah']) data.foto_ijazah = req.files['foto_ijazah'][0].filename;
+            if (req.files['kartu_keluarga']) data.kartu_keluarga = req.files['kartu_keluarga'][0].filename;
+        }
+
+        // Simpan teks dan nama file ke Firebase Database
+        if (db) {
+            await db.ref("pendaftar").push(data);
+        }
+        
+        res.send(`
+            <div style="text-align:center; padding:50px; font-family:sans-serif;">
+                <h2 style="color:green;">✅ Pendaftaran Berhasil!</h2>
+                <p>Data dan berkas Anda telah tersimpan.</p>
+                <a href="/" style="padding:10px 20px; background:#1a5928; color:white; text-decoration:none; border-radius:5px;">Kembali ke Form</a>
+            </div>
+        `);
+    } catch (e) {
+        res.status(500).send("Error: " + e.message);
+    }
+});
+
+// --- 7. ADMIN PANEL DASHBOARD ---
 app.get('/admin', checkAuth, async (req, res) => {
     try {
-        const snapshot = await db.ref("pendaftar").once("value");
-        const data = snapshot.val() || {};
-        const daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        let daftar = [];
+        if (db) {
+            const snapshot = await db.ref("pendaftar").once("value");
+            const data = snapshot.val() || {};
+            daftar = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        }
 
         let rows = daftar.map((s, i) => `
             <tr class="align-middle">
-                <td class="text-center text-muted fw-bold">${i + 1}</td>
+                <td class="text-center">${i + 1}</td>
                 <td class="text-center">
-                    <div class="avatar-wrapper">
-                        <img src="${s.foto_santri}" class="rounded-3 shadow-sm" style="width:45px; height:55px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/100x125?text=No+Photo'">
-                    </div>
+                    <img src="/uploads/${s.foto_santri}" class="rounded shadow-sm" style="width:50px; height:60px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/50x60?text=No+Photo'">
                 </td>
                 <td>
-                    <div class="fw-bold text-dark mb-0">${s.nama}</div>
-                    <small class="text-muted"><i class="bi bi-fingerprint"></i> ${s.nisn || s.nim || '-'}</small>
+                    <strong>${s.nama}</strong><br>
+                    <small class="text-muted">${s.nisn || s.nim || '-'}</small>
                 </td>
-                <td>
-                    <span class="badge rounded-pill bg-success bg-opacity-10 text-success px-3">
-                        ${s.sekolah_tujuan || '-'}
-                    </span>
-                </td>
+                <td><span class="badge bg-success">${s.sekolah_tujuan || '-'}</span></td>
                 <td class="text-center">
-                    <button class="btn btn-light btn-sm border shadow-sm px-3 fw-bold text-primary" onclick='viewDetail(${JSON.stringify(s)})'>
-                        <i class="bi bi-search me-1"></i> Detail
-                    </button>
+                    <button class="btn btn-outline-primary btn-sm" onclick='viewDetail(${JSON.stringify(s)})'>Detail</button>
                 </td>
             </tr>
         `).join('');
@@ -107,29 +154,24 @@ app.get('/admin', checkAuth, async (req, res) => {
             <html lang="id">
             <head>
                 <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Admin PSB - Pesantren Ihyauth Tholibin</title>
+                <title>Admin PSB</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-                <style>
-                    :root { --primary-color: #1a5928; }
-                    body { background-color: #f0f2f5; font-family: 'Inter', sans-serif; }
-                    .navbar { background: var(--primary-color) !important; }
-                    .section-header { border-left: 4px solid var(--primary-color); padding-left: 10px; margin: 20px 0 10px; font-weight: bold; color: var(--primary-color); }
-                    .info-box { background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #edf2f7; margin-bottom: 10px; }
-                    .info-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
-                    .info-value { font-weight: 600; color: #1e293b; }
-                </style>
+                <style> body { background: #f4f6f9; } .navbar { background: #1a5928; } </style>
             </head>
             <body>
-                <nav class="navbar navbar-dark mb-4"><div class="container"><span class="navbar-brand fw-bold">DASHBOARD ADMIN PSB</span><a href="/logout" class="btn btn-sm btn-outline-light">Keluar</a></div></nav>
-                <div class="container"><div class="card p-4 shadow-sm border-0" style="border-radius:15px;">
-                    <table class="table table-hover"><thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th class="text-center">Aksi</th></tr></thead><tbody>${rows}</tbody></table>
-                </div></div>
+                <nav class="navbar navbar-dark mb-4"><div class="container"><span class="navbar-brand">Dashboard Admin</span><a href="/logout" class="btn btn-sm btn-light">Logout</a></div></nav>
+                <div class="container">
+                    <div class="card p-4 shadow-sm border-0 rounded-4">
+                        <table class="table table-hover">
+                            <thead><tr><th>No</th><th>Foto</th><th>Nama</th><th>Jenjang</th><th>Aksi</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
 
-                <div class="modal fade" id="modalDetail" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content" style="border-radius:20px;">
-                    <div class="modal-header border-0"><h5 class="fw-bold">Profil Santri</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                    <div class="modal-body p-4" id="detailContent"></div>
+                <div class="modal fade" id="modalDetail"><div class="modal-dialog modal-lg"><div class="modal-content">
+                    <div class="modal-header"><h5 class="modal-title">Detail Santri</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body" id="detailContent"></div>
                 </div></div></div>
 
                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -138,25 +180,26 @@ app.get('/admin', checkAuth, async (req, res) => {
                         const content = \`
                             <div class="row">
                                 <div class="col-md-4 text-center">
-                                    <img src="\${s.foto_santri}" class="img-fluid rounded shadow-sm mb-3" onerror="this.src='https://via.placeholder.com/300x400'">
-                                    <div class="badge bg-primary w-100 py-2 mb-2">\${s.sekolah_tujuan || '-'}</div>
-                                    <a href="https://wa.me/\${s.whatsapp_orangtua}" target="_blank" class="btn btn-success btn-sm w-100"><i class="bi bi-whatsapp"></i> Chat Ortu</a>
+                                    <img src="/uploads/\${s.foto_santri}" class="img-fluid rounded mb-3" onerror="this.src='https://via.placeholder.com/200x250?text=No+Photo'">
+                                    <a href="https://wa.me/\${s.whatsapp_orangtua}" target="_blank" class="btn btn-success w-100">Chat WhatsApp</a>
                                 </div>
                                 <div class="col-md-8">
-                                    <h6 class="section-header">DATA PRIBADI</h6>
-                                    <div class="row">
-                                        <div class="col-6"><div class="info-box"><div class="info-label">Nama</div><div class="info-value">\${s.nama}</div></div></div>
-                                        <div class="col-6"><div class="info-box"><div class="info-label">NISN</div><div class="info-value">\${s.nisn || '-'}</div></div></div>
-                                        <div class="col-12"><div class="info-box"><div class="info-label">Alamat</div><div class="info-value">\${s.alamat || '-'}</div></div></div>
-                                    </div>
-                                    <h6 class="section-header">BERKAS DIGITAL</h6>
-                                    <div class="d-grid gap-2">
-                                        \${s.foto_ktp_ayah ? \`<a href="\${s.foto_ktp_ayah}" target="_blank" class="btn btn-outline-dark btn-sm text-start"><i class="bi bi-file-earmark-image"></i> Lihat KTP Ayah</a>\` : '<button class="btn btn-light btn-sm disabled">KTP Tidak Ada</button>'}
-                                        \${s.foto_ijazah ? \`<a href="\${s.foto_ijazah}" target="_blank" class="btn btn-outline-dark btn-sm text-start"><i class="bi bi-file-earmark-text"></i> Lihat Ijazah</a>\` : '<button class="btn btn-light btn-sm disabled">Ijazah Tidak Ada</button>'}
-                                        \${s.kartu_keluarga ? \`<a href="\${s.kartu_keluarga}" target="_blank" class="btn btn-outline-dark btn-sm text-start"><i class="bi bi-people"></i> Lihat Kartu Keluarga</a>\` : '<button class="btn btn-light btn-sm disabled">KK Tidak Ada</button>'}
+                                    <table class="table table-bordered">
+                                        <tr><th>Nama</th><td>\${s.nama}</td></tr>
+                                        <tr><th>NISN/NIK</th><td>\${s.nisn || '-'} / \${s.nik || '-'}</td></tr>
+                                        <tr><th>TTL</th><td>\${s.tempat_lahir}, \${s.tanggal_lahir}</td></tr>
+                                        <tr><th>Alamat</th><td>\${s.alamat}</td></tr>
+                                        <tr><th>Nama Ayah</th><td>\${s.nama_ayah} (\${s.pekerjaan_ayah})</td></tr>
+                                    </table>
+                                    <h6>Berkas Digital:</h6>
+                                    <div class="d-flex gap-2">
+                                        \${s.foto_ktp_ayah ? \`<a href="/uploads/\${s.foto_ktp_ayah}" target="_blank" class="btn btn-sm btn-outline-dark">KTP Ayah</a>\` : ''}
+                                        \${s.foto_ijazah ? \`<a href="/uploads/\${s.foto_ijazah}" target="_blank" class="btn btn-sm btn-outline-dark">Ijazah</a>\` : ''}
+                                        \${s.kartu_keluarga ? \`<a href="/uploads/\${s.kartu_keluarga}" target="_blank" class="btn btn-sm btn-outline-dark">Kartu Keluarga</a>\` : ''}
                                     </div>
                                 </div>
-                            </div>\`;
+                            </div>
+                        \`;
                         document.getElementById('detailContent').innerHTML = content;
                         new bootstrap.Modal(document.getElementById('modalDetail')).show();
                     }
@@ -164,52 +207,8 @@ app.get('/admin', checkAuth, async (req, res) => {
             </body>
             </html>
         `);
-    } catch (e) { res.status(500).send("Gagal: " + e.message); }
-});
-
-// --- 6. ROUTE PENDAFTARAN ---
-app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
-
-const storage = multer.memoryStorage(); 
-const upload = multer({ storage: storage });
-
-const cpUpload = upload.fields([
-    { name: 'foto_santri', maxCount: 1 },
-    { name: 'foto_ktp_ayah', maxCount: 1 },
-    { name: 'foto_ijazah', maxCount: 1 },
-    { name: 'kartu_keluarga', maxCount: 1 }
-]);
-
-app.post('/simpan', cpUpload, async (req, res) => {
-    try {
-        const data = { ...req.body, waktu: new Date().toLocaleString() };
-
-        if (req.files) {
-            const uploadPromises = Object.keys(req.files).map(fieldname => {
-                return new Promise((resolve, reject) => {
-                    const file = req.files[fieldname][0];
-                    const fileName = Date.now() + "-" + file.originalname;
-                    const blob = bucket.file(fileName);
-                    const blobStream = blob.createWriteStream({ resumable: false, contentType: file.mimetype });
-
-                    blobStream.on('error', (err) => reject(err));
-                    blobStream.on('finish', async () => {
-                        await blob.makePublic();
-                        data[fieldname] = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-                        resolve();
-                    });
-                    blobStream.end(file.buffer);
-                });
-            });
-            await Promise.all(uploadPromises);
-        }
-
-        await db.ref("pendaftar").push(data);
-        res.send("<h2>✅ Pendaftaran Berhasil!</h2><a href='/'>Kembali</a>");
-    } catch (e) {
-        res.status(500).send("Error: " + e.message);
-    }
+    } catch (e) { res.status(500).send("Error: " + e.message); }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => { console.log(`✅ Server Aktif di Port ${PORT}`); });
+app.listen(PORT, '0.0.0.0', () => { console.log(\`✅ Server Aktif di Port \${PORT}\`); });
